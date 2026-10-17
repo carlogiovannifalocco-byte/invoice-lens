@@ -5,6 +5,7 @@ from __future__ import annotations
 import json
 import os
 import re
+import time
 from contextlib import contextmanager
 
 import httpx
@@ -45,6 +46,31 @@ def _config() -> dict:
 
 def model_name() -> str:
     return _config()["model"]
+
+
+_status_cache: dict[tuple, tuple[float, bool]] = {}
+STATUS_TTL = 20.0
+
+
+def endpoint_reachable() -> bool:
+    """Cheap check (GET /models, short timeout, cached) used by the UI status badge.
+    It does not run the model; /api/health does a real round trip."""
+    cfg = _config()
+    key = (cfg["base_url"], cfg["api_key"])
+    hit = _status_cache.get(key)
+    if hit and time.monotonic() - hit[0] < STATUS_TTL:
+        return hit[1]
+    try:
+        resp = httpx.get(
+            f"{cfg['base_url']}/models",
+            headers={"Authorization": f"Bearer {cfg['api_key']}"},
+            timeout=float(os.getenv("LLM_STATUS_TIMEOUT", "1.5")),
+        )
+        ok = resp.status_code < 400
+    except httpx.HTTPError:
+        ok = False
+    _status_cache[key] = (time.monotonic(), ok)
+    return ok
 
 
 def chat_json(system: str, user: str, task: str) -> dict:

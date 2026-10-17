@@ -1,156 +1,988 @@
 <!doctype html>
-<html lang="it">
+<html lang="en">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>InvoiceLens</title>
+<meta name="description" content="Italian e-invoices sorted by an open model running on your machine.">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='8' fill='%230f766e'/%3E%3Cpath d='M9 7h10l4 4v14H9z' fill='%23fff' opacity='.95'/%3E%3Ccircle cx='17' cy='18' r='4' fill='none' stroke='%230f766e' stroke-width='2'/%3E%3Cpath d='m20 21 3 3' stroke='%230f766e' stroke-width='2' stroke-linecap='round'/%3E%3C/svg%3E">
 <style>
-  :root { --bg:#f7f6f2; --card:#fff; --ink:#1d1d1b; --muted:#6b6a65; --line:#e3e1da; --accent:#1f6f5c; --warn:#b4541a; --bad:#b3261e; }
-  @media (prefers-color-scheme: dark) { :root { --bg:#151514; --card:#1f1f1d; --ink:#ecebe6; --muted:#a3a29b; --line:#33322f; --accent:#5cc0a4; --warn:#f0a35e; --bad:#ff8a80; } }
-  * { box-sizing: border-box; }
-  body { margin:0; font:15px/1.5 system-ui, -apple-system, "Segoe UI", sans-serif; background:var(--bg); color:var(--ink); }
-  header { padding:24px 16px 8px; max-width:1100px; margin:auto; display:flex; flex-wrap:wrap; gap:12px; align-items:baseline; justify-content:space-between; }
-  h1 { margin:0; font-size:24px; } h1 span { color:var(--accent); }
-  .sub { color:var(--muted); margin:0; }
-  main { max-width:1100px; margin:auto; padding:8px 16px 48px; display:grid; gap:16px; }
-  .card { background:var(--card); border:1px solid var(--line); border-radius:12px; padding:16px; }
-  .grid { display:grid; gap:16px; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); }
-  #drop { border:2px dashed var(--line); border-radius:12px; padding:28px; text-align:center; cursor:pointer; }
-  #drop.over { border-color:var(--accent); }
-  .kpi { font-size:28px; font-weight:650; } .label { color:var(--muted); font-size:13px; }
-  table { width:100%; border-collapse:collapse; } th, td { text-align:left; padding:8px 6px; border-bottom:1px solid var(--line); vertical-align:top; }
-  th { font-size:12px; color:var(--muted); font-weight:600; text-transform:uppercase; letter-spacing:.03em; }
-  td.num { text-align:right; font-variant-numeric: tabular-nums; }
-  .tag { display:inline-block; padding:1px 8px; border-radius:99px; background:color-mix(in srgb, var(--accent) 15%, transparent); color:var(--accent); font-size:12px; }
-  .warn { color:var(--warn); font-size:13px; } .bad { color:var(--bad); }
-  .bar { height:8px; background:var(--accent); border-radius:4px; }
-  button, select, input[type=month] { font:inherit; padding:6px 12px; border-radius:8px; border:1px solid var(--line); background:var(--card); color:var(--ink); cursor:pointer; }
-  button.primary { background:var(--accent); color:#fff; border-color:var(--accent); }
-  .row { display:flex; flex-wrap:wrap; gap:8px; align-items:center; }
-  .scroll { overflow-x:auto; }
-  #summary p { margin:0 0 8px; }
-  .muted { color:var(--muted); }
+:root {
+  color-scheme: light;
+  --bg:#f5f6f8; --surface:#ffffff; --surface-2:#f0f2f5; --surface-3:#e7eaee;
+  --ink:#11151b; --ink-2:#3d4652; --muted:#5f6876; --line:#e1e5ea; --line-2:#d0d6dd;
+  --accent:#0f766e; --accent-2:#0d9488; --accent-soft:#e3f4f1; --accent-ink:#ffffff;
+  --good:#067647; --good-soft:#e6f6ee; --warn:#a15c07; --warn-soft:#fdf3e1; --bad:#b42318; --bad-soft:#fdecea;
+  --ring:#0f766e;
+  --shadow:0 1px 2px rgba(16,24,40,.05), 0 1px 3px rgba(16,24,40,.06);
+  --shadow-lg:0 12px 32px -8px rgba(16,24,40,.18), 0 4px 8px -4px rgba(16,24,40,.08);
+  --c-software:#2a78d6; --c-hardware:#6250d6; --c-travel:#eb6834; --c-meals:#d6457a;
+  --c-office:#d99100; --c-utilities:#1baf7a; --c-telecom:#0e98b5; --c-professional_services:#008300;
+  --c-training:#a24fc4; --c-marketing:#e35d5c; --c-rent:#9a6a3a; --c-other:#7d838c;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    color-scheme: dark;
+    --bg:#0c0f13; --surface:#151a20; --surface-2:#1b2128; --surface-3:#242b34;
+    --ink:#e9edf2; --ink-2:#c0c7d1; --muted:#929cab; --line:#262d36; --line-2:#333c47;
+    --accent:#2ec4ad; --accent-2:#5eead4; --accent-soft:#11302c; --accent-ink:#04201c;
+    --good:#4ad38f; --good-soft:#0f2b1e; --warn:#f2b250; --warn-soft:#2e2412; --bad:#ff8a7a; --bad-soft:#341a17;
+    --ring:#5eead4;
+    --shadow:0 1px 2px rgba(0,0,0,.3);
+    --shadow-lg:0 16px 40px -8px rgba(0,0,0,.6);
+    --c-software:#3f8ff0; --c-hardware:#9085e9; --c-travel:#ec7440; --c-meals:#e0679a;
+    --c-office:#d6a01c; --c-utilities:#25b884; --c-telecom:#22aac6; --c-professional_services:#3aa53a;
+    --c-training:#bb72dc; --c-marketing:#ec7170; --c-rent:#b48455; --c-other:#8d94a0;
+  }
+}
+:root[data-theme="dark"] {
+  color-scheme: dark;
+  --bg:#0c0f13; --surface:#151a20; --surface-2:#1b2128; --surface-3:#242b34;
+  --ink:#e9edf2; --ink-2:#c0c7d1; --muted:#929cab; --line:#262d36; --line-2:#333c47;
+  --accent:#2ec4ad; --accent-2:#5eead4; --accent-soft:#11302c; --accent-ink:#04201c;
+  --good:#4ad38f; --good-soft:#0f2b1e; --warn:#f2b250; --warn-soft:#2e2412; --bad:#ff8a7a; --bad-soft:#341a17;
+  --ring:#5eead4;
+  --shadow:0 1px 2px rgba(0,0,0,.3);
+  --shadow-lg:0 16px 40px -8px rgba(0,0,0,.6);
+  --c-software:#3f8ff0; --c-hardware:#9085e9; --c-travel:#ec7440; --c-meals:#e0679a;
+  --c-office:#d6a01c; --c-utilities:#25b884; --c-telecom:#22aac6; --c-professional_services:#3aa53a;
+  --c-training:#bb72dc; --c-marketing:#ec7170; --c-rent:#b48455; --c-other:#8d94a0;
+}
+
+* { box-sizing: border-box; }
+[hidden] { display:none !important; }
+html { -webkit-text-size-adjust: 100%; }
+body { margin:0; background:var(--bg); color:var(--ink); font:14px/1.5 ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif; -webkit-font-smoothing: antialiased; }
+button, input, select { font:inherit; color:inherit; }
+a { color:var(--accent); }
+h1, h2, h3 { margin:0; line-height:1.25; }
+h2 { font-size:15px; font-weight:650; letter-spacing:-.005em; }
+.num, td.num { font-variant-numeric: tabular-nums; }
+.sr-only { position:absolute; width:1px; height:1px; padding:0; margin:-1px; overflow:hidden; clip:rect(0,0,0,0); white-space:nowrap; border:0; }
+:focus-visible { outline:2px solid var(--ring); outline-offset:2px; border-radius:6px; }
+svg.i { width:16px; height:16px; flex:none; stroke:currentColor; fill:none; stroke-width:1.8; stroke-linecap:round; stroke-linejoin:round; }
+
+/* ---------- header ---------- */
+.top { position:sticky; top:0; z-index:20; background:color-mix(in srgb, var(--bg) 82%, transparent); backdrop-filter:saturate(1.4) blur(10px); -webkit-backdrop-filter:saturate(1.4) blur(10px); border-bottom:1px solid var(--line); }
+.top-in { max-width:1320px; margin:auto; padding:12px 24px; display:flex; align-items:center; gap:16px; flex-wrap:wrap; }
+.brand { display:flex; align-items:center; gap:10px; margin-right:auto; min-width:0; }
+.logo { width:34px; height:34px; border-radius:9px; background:linear-gradient(140deg, var(--accent), #115e59); display:grid; place-items:center; box-shadow:var(--shadow); flex:none; }
+.logo svg { width:20px; height:20px; }
+.brand h1 { font-size:18px; font-weight:700; letter-spacing:-.02em; }
+.brand h1 span { color:var(--accent); }
+.brand p { margin:0; color:var(--muted); font-size:12.5px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+.badge { display:inline-flex; align-items:center; gap:7px; padding:5px 10px 5px 9px; border-radius:999px; border:1px solid var(--line); background:var(--surface); font-size:12.5px; color:var(--ink-2); white-space:nowrap; box-shadow:var(--shadow); }
+.badge b { color:var(--ink); font-weight:600; }
+.dot { width:8px; height:8px; border-radius:50%; background:var(--muted); flex:none; }
+.badge.on .dot { background:var(--good); box-shadow:0 0 0 3px color-mix(in srgb, var(--good) 22%, transparent); }
+.badge.off .dot { background:var(--warn); box-shadow:0 0 0 3px color-mix(in srgb, var(--warn) 22%, transparent); }
+.tools { display:flex; align-items:center; gap:8px; flex-wrap:wrap; }
+.btn { display:inline-flex; align-items:center; justify-content:center; gap:7px; height:34px; padding:0 12px; border-radius:9px; border:1px solid var(--line-2); background:var(--surface); color:var(--ink); cursor:pointer; text-decoration:none; font-weight:550; font-size:13px; white-space:nowrap; box-shadow:var(--shadow); transition:background .15s, border-color .15s; }
+.btn:hover { background:var(--surface-2); }
+.btn.primary { background:var(--accent); border-color:var(--accent); color:var(--accent-ink); }
+.btn.primary:hover { background:color-mix(in srgb, var(--accent) 88%, #000); }
+.btn.ghost { box-shadow:none; border-color:transparent; background:transparent; }
+.btn.ghost:hover { background:var(--surface-2); }
+.btn.icon { width:34px; padding:0; }
+.btn[disabled] { opacity:.55; cursor:not-allowed; }
+.month { display:inline-flex; align-items:center; border:1px solid var(--line-2); border-radius:9px; background:var(--surface); box-shadow:var(--shadow); height:34px; }
+.month button { border:0; background:transparent; width:30px; height:32px; cursor:pointer; color:var(--ink-2); display:grid; place-items:center; border-radius:8px; }
+.month button:hover { background:var(--surface-2); }
+.month select { border:0; background:transparent; font-weight:600; font-size:13px; padding:0 4px; height:32px; cursor:pointer; appearance:none; -webkit-appearance:none; text-align:center; min-width:118px; }
+
+/* ---------- layout ---------- */
+main { max-width:1320px; margin:auto; padding:20px 24px 64px; display:grid; gap:16px; }
+.card { background:var(--surface); border:1px solid var(--line); border-radius:14px; box-shadow:var(--shadow); min-width:0; }
+.card-h { display:flex; align-items:center; justify-content:space-between; gap:12px; padding:16px 18px 0; flex-wrap:wrap; }
+.card-h .sub { color:var(--muted); font-size:12.5px; margin-top:2px; }
+.card-b { padding:14px 18px 18px; }
+.cols { display:grid; gap:16px; grid-template-columns: minmax(0,7fr) minmax(0,5fr); align-items:start; }
+.stack { display:grid; gap:16px; }
+.muted { color:var(--muted); }
+.pill { display:inline-flex; align-items:center; gap:5px; font-size:11.5px; font-weight:600; padding:2px 8px; border-radius:999px; background:var(--surface-2); color:var(--ink-2); white-space:nowrap; }
+.pill.bad { background:var(--bad-soft); color:var(--bad); }
+.pill.warn { background:var(--warn-soft); color:var(--warn); }
+.pill.good { background:var(--good-soft); color:var(--good); }
+.pill.accent { background:var(--accent-soft); color:var(--accent); }
+
+/* ---------- upload ---------- */
+.drop { position:relative; display:flex; align-items:center; gap:16px; padding:16px 18px; border:1.5px dashed var(--line-2); border-radius:14px; background:var(--surface); transition:border-color .15s, background .15s; }
+.drop.over { border-color:var(--accent); background:var(--accent-soft); }
+.drop .up { width:42px; height:42px; border-radius:11px; background:var(--accent-soft); color:var(--accent); display:grid; place-items:center; flex:none; }
+.drop .up svg { width:22px; height:22px; }
+.drop .txt { flex:1; min-width:0; }
+.drop .txt b { font-weight:650; }
+.drop .txt div { color:var(--muted); font-size:12.5px; }
+.exts { display:flex; gap:5px; flex-wrap:wrap; margin-top:6px; }
+.exts span { font:600 11px/1 ui-monospace, SFMono-Regular, Menlo, monospace; padding:4px 6px; border-radius:5px; background:var(--surface-2); color:var(--ink-2); border:1px solid var(--line); }
+.drop.big { flex-direction:column; text-align:center; padding:44px 20px 40px; gap:12px; }
+.drop.big .up { width:56px; height:56px; border-radius:14px; }
+.drop.big .up svg { width:28px; height:28px; }
+.drop.big .txt b { font-size:17px; }
+.drop.big .exts { justify-content:center; }
+.drop.disabled { border-style:solid; }
+.progress { display:none; margin-top:10px; }
+.progress.show { display:block; }
+.bar-track { height:6px; border-radius:99px; background:var(--surface-3); overflow:hidden; }
+.bar-fill { height:100%; width:0; background:var(--accent); border-radius:99px; transition:width .25s; }
+.progress p { margin:6px 0 0; font-size:12.5px; color:var(--muted); }
+
+/* ---------- empty state ---------- */
+.empty { display:grid; gap:16px; }
+.steps { display:grid; grid-template-columns:repeat(3, minmax(0,1fr)); gap:12px; }
+.step { padding:16px; border:1px solid var(--line); border-radius:12px; background:var(--surface); }
+.step .n { width:24px; height:24px; border-radius:7px; background:var(--accent-soft); color:var(--accent); display:grid; place-items:center; font-weight:700; font-size:12px; margin-bottom:8px; }
+.step b { display:block; margin-bottom:2px; }
+.step p { margin:0; color:var(--muted); font-size:13px; }
+.try { display:flex; gap:10px; align-items:center; justify-content:center; flex-wrap:wrap; }
+code { font:12.5px ui-monospace, SFMono-Regular, Menlo, monospace; background:var(--surface-2); padding:1px 5px; border-radius:5px; }
+
+/* ---------- KPIs ---------- */
+.kpis { display:grid; grid-template-columns:repeat(5, minmax(0,1fr)); gap:12px; }
+.kpi { padding:14px 16px 15px; position:relative; }
+.kpi .lbl { display:flex; align-items:center; gap:7px; font-size:12.5px; color:var(--muted); font-weight:550; }
+.kpi .lbl .ic { width:24px; height:24px; border-radius:7px; display:grid; place-items:center; background:var(--surface-2); color:var(--ink-2); }
+.kpi .lbl .ic svg { width:14px; height:14px; }
+.kpi .val { font-size:25px; font-weight:700; letter-spacing:-.02em; margin-top:8px; font-variant-numeric:tabular-nums; white-space:nowrap; }
+.kpi .val small { font-size:15px; font-weight:600; color:var(--muted); }
+.kpi .foot { font-size:12.5px; color:var(--muted); margin-top:2px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+.kpi.alert .ic { background:var(--warn-soft); color:var(--warn); }
+.kpi.alert .val { color:var(--warn); }
+.kpi.accent .ic { background:var(--accent-soft); color:var(--accent); }
+
+/* ---------- chart ---------- */
+.chart { display:grid; gap:11px; }
+.crow { display:grid; grid-template-columns: 172px minmax(0,1fr) 92px 44px; align-items:center; gap:12px; border-radius:8px; }
+.crow .nm { display:flex; align-items:center; gap:8px; font-weight:550; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+.crow .sw { width:10px; height:10px; border-radius:3px; flex:none; }
+.crow svg { display:block; width:100%; height:14px; overflow:visible; }
+.crow .amt { text-align:right; font-weight:600; font-variant-numeric:tabular-nums; }
+.crow .pct { text-align:right; color:var(--muted); font-size:12.5px; font-variant-numeric:tabular-nums; }
+.crow:hover .nm { color:var(--accent); }
+.chart-foot { margin-top:16px; padding-top:12px; border-top:1px solid var(--line); display:flex; gap:8px; align-items:center; flex-wrap:wrap; font-size:12.5px; color:var(--muted); }
+.share { display:flex; height:10px; border-radius:99px; overflow:hidden; gap:2px; margin:2px 0 16px; }
+.share span { display:block; height:100%; min-width:3px; }
+
+/* ---------- anomalies ---------- */
+.alist { display:grid; gap:10px; }
+.anom { display:grid; grid-template-columns:32px minmax(0,1fr); gap:12px; padding:12px; border-radius:11px; border:1px solid var(--line); background:var(--surface); }
+.anom .ai { width:32px; height:32px; border-radius:9px; display:grid; place-items:center; }
+.anom.bad .ai { background:var(--bad-soft); color:var(--bad); }
+.anom.warn .ai { background:var(--warn-soft); color:var(--warn); }
+.anom .t { display:flex; align-items:baseline; justify-content:space-between; gap:8px; }
+.anom .t b { font-weight:650; }
+.anom .who { font-size:12.5px; color:var(--ink-2); }
+.anom .msg { font-size:13px; margin-top:4px; }
+.anom .why { font-size:12.5px; color:var(--muted); margin-top:3px; }
+.link { border:0; background:none; padding:0; color:var(--accent); font-weight:600; font-size:12.5px; cursor:pointer; white-space:nowrap; }
+.link:hover { text-decoration:underline; }
+.ok-state { display:flex; gap:12px; align-items:center; padding:14px; border-radius:11px; background:var(--good-soft); color:var(--good); font-weight:550; }
+
+/* ---------- due ---------- */
+.due { display:grid; gap:2px; }
+.drow { display:grid; grid-template-columns:44px minmax(0,1fr) auto; gap:12px; align-items:center; padding:8px 6px; border-radius:9px; }
+.drow:hover { background:var(--surface-2); }
+.cal { width:44px; border-radius:9px; border:1px solid var(--line); text-align:center; overflow:hidden; background:var(--surface); }
+.cal i { display:block; font-style:normal; font-size:10px; font-weight:700; text-transform:uppercase; letter-spacing:.06em; background:var(--surface-2); color:var(--muted); padding:2px 0; }
+.cal b { display:block; font-size:16px; padding:2px 0 3px; font-variant-numeric:tabular-nums; }
+.drow .s { font-weight:600; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+.drow .when { font-size:12.5px; color:var(--muted); }
+.drow .a { font-weight:650; font-variant-numeric:tabular-nums; }
+.due-total { display:flex; justify-content:space-between; margin-top:10px; padding-top:10px; border-top:1px solid var(--line); font-weight:600; }
+
+/* ---------- summary ---------- */
+.facts { display:grid; grid-template-columns:repeat(2, minmax(0,1fr)); gap:10px; margin:0; padding:0; list-style:none; }
+.facts li { padding:11px 12px; border-radius:10px; background:var(--surface-2); font-size:13px; }
+.facts li span { display:block; color:var(--muted); font-size:12px; }
+.facts li b { font-weight:650; }
+.narr { margin-top:14px; display:grid; gap:10px; }
+.lang { display:grid; grid-template-columns:30px minmax(0,1fr); gap:10px; align-items:start; }
+.lang i { font-style:normal; font:700 11px/1 ui-monospace, monospace; padding:5px 0; text-align:center; border-radius:6px; background:var(--accent-soft); color:var(--accent); }
+.lang p { margin:0; }
+.note { margin-top:14px; display:flex; gap:10px; align-items:flex-start; padding:11px 12px; border-radius:10px; border:1px dashed var(--line-2); color:var(--muted); font-size:12.5px; }
+.note svg { margin-top:1px; }
+.spin { width:14px; height:14px; border-radius:50%; border:2px solid currentColor; border-right-color:transparent; animation:spin .8s linear infinite; display:inline-block; }
+@keyframes spin { to { transform:rotate(360deg); } }
+
+/* ---------- table ---------- */
+.filters { display:flex; gap:8px; align-items:center; flex-wrap:wrap; padding:14px 18px; border-bottom:1px solid var(--line); }
+.search { position:relative; flex:1 1 220px; max-width:320px; }
+.search svg { position:absolute; left:10px; top:9px; color:var(--muted); }
+.search input { width:100%; height:34px; border-radius:9px; border:1px solid var(--line-2); background:var(--surface); padding:0 10px 0 32px; }
+.sel { height:34px; border-radius:9px; border:1px solid var(--line-2); background:var(--surface); padding:0 28px 0 10px; appearance:none; -webkit-appearance:none; background-image:linear-gradient(45deg, transparent 50%, var(--muted) 50%), linear-gradient(135deg, var(--muted) 50%, transparent 50%); background-position:calc(100% - 15px) 15px, calc(100% - 10px) 15px; background-size:5px 5px; background-repeat:no-repeat; cursor:pointer; }
+.chipbtn { display:inline-flex; align-items:center; gap:6px; height:34px; padding:0 12px; border-radius:9px; border:1px solid var(--line-2); background:var(--surface); cursor:pointer; font-weight:550; font-size:13px; }
+.chipbtn[aria-pressed="true"] { background:var(--accent-soft); border-color:color-mix(in srgb, var(--accent) 45%, transparent); color:var(--accent); }
+.chipbtn .ct { font-size:11.5px; padding:0 6px; border-radius:99px; background:var(--surface-2); color:var(--ink-2); }
+.chipbtn[aria-pressed="true"] .ct { background:var(--surface); color:var(--accent); }
+.count { margin-left:auto; color:var(--muted); font-size:12.5px; }
+.tbl-wrap { overflow-x:auto; }
+table { width:100%; border-collapse:collapse; }
+th { text-align:left; font-size:12px; font-weight:600; color:var(--muted); padding:10px 10px; border-bottom:1px solid var(--line); background:var(--surface); white-space:nowrap; }
+th.num, td.num { text-align:right; }
+th button { all:unset; cursor:pointer; display:inline-flex; align-items:center; gap:4px; border-radius:5px; }
+th button:focus-visible { outline:2px solid var(--ring); outline-offset:2px; }
+th button:hover { color:var(--ink); }
+th .arrow { opacity:.35; font-size:10px; }
+th[aria-sort] .arrow { opacity:1; color:var(--accent); }
+td { padding:11px 10px; border-bottom:1px solid var(--line); vertical-align:middle; }
+tr.inv { cursor:pointer; }
+tr.inv:hover td { background:var(--surface-2); }
+tr.inv.open td { background:var(--surface-2); border-bottom-color:transparent; }
+td.c-exp { width:36px; padding-right:0; }
+.exp { width:26px; height:26px; border-radius:7px; border:0; background:transparent; display:grid; place-items:center; cursor:pointer; color:var(--muted); transition:transform .15s; }
+.exp:hover { background:var(--surface-3); color:var(--ink); }
+tr.open .exp { transform:rotate(90deg); color:var(--accent); }
+.sup b { font-weight:600; display:block; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; max-width:300px; }
+.sup span { font-size:12px; color:var(--muted); white-space:nowrap; }
+.flags { display:inline-flex; gap:4px; margin-left:6px; vertical-align:1px; }
+.flag { width:18px; height:18px; border-radius:5px; display:inline-grid; place-items:center; }
+.flag svg { width:11px; height:11px; stroke-width:2.2; }
+.flag.bad { background:var(--bad-soft); color:var(--bad); }
+.flag.warn { background:var(--warn-soft); color:var(--warn); }
+.catsel { position:relative; display:inline-flex; align-items:center; gap:7px; height:28px; padding:0 26px 0 10px; border-radius:999px; background:color-mix(in srgb, var(--cc) 13%, var(--surface)); border:1px solid color-mix(in srgb, var(--cc) 32%, transparent); font-size:12.5px; font-weight:600; white-space:nowrap; }
+.catsel::before { content:""; width:8px; height:8px; border-radius:50%; background:var(--cc); flex:none; }
+.catsel::after { content:""; position:absolute; right:10px; top:10px; width:5px; height:5px; border-right:1.5px solid var(--muted); border-bottom:1.5px solid var(--muted); transform:rotate(45deg); pointer-events:none; }
+.catsel select { position:absolute; inset:0; opacity:0; cursor:pointer; width:100%; }
+.catsel:focus-within { outline:2px solid var(--ring); outline-offset:2px; }
+.chip { display:inline-flex; align-items:center; gap:6px; font-size:12.5px; font-weight:600; padding:3px 9px; border-radius:999px; background:color-mix(in srgb, var(--cc) 13%, var(--surface)); border:1px solid color-mix(in srgb, var(--cc) 32%, transparent); white-space:nowrap; }
+.chip::before { content:""; width:7px; height:7px; border-radius:50%; background:var(--cc); }
+.src { display:inline-flex; align-items:center; gap:5px; font:600 11.5px/1 ui-monospace, SFMono-Regular, Menlo, monospace; padding:4px 7px; border-radius:6px; border:1px solid var(--line); color:var(--ink-2); background:var(--surface); white-space:nowrap; }
+.src.model { color:var(--accent); border-color:color-mix(in srgb, var(--accent) 35%, transparent); background:var(--accent-soft); }
+.src.manual { color:var(--ink); background:var(--surface-3); }
+.src svg { width:11px; height:11px; }
+.status { font-size:12.5px; white-space:nowrap; }
+.status .d { color:var(--muted); display:block; font-size:12px; }
+.st-bad { color:var(--bad); font-weight:600; }
+.st-warn { color:var(--warn); font-weight:600; }
+.st-good { color:var(--good); font-weight:600; }
+.switch { position:relative; width:36px; height:20px; border-radius:99px; border:0; background:var(--surface-3); cursor:pointer; padding:0; transition:background .15s; flex:none; box-shadow:inset 0 0 0 1px var(--line-2); }
+.switch::after { content:""; position:absolute; top:2px; left:2px; width:16px; height:16px; border-radius:50%; background:#fff; box-shadow:0 1px 2px rgba(0,0,0,.25); transition:transform .15s; }
+.switch[aria-checked="true"] { background:var(--good); box-shadow:none; }
+.switch[aria-checked="true"]::after { transform:translateX(16px); }
+.paidcell { display:flex; align-items:center; gap:8px; font-size:12.5px; color:var(--muted); }
+tr.details > td { padding:0 10px 16px 46px; background:var(--surface-2); }
+.dgrid { display:grid; grid-template-columns: minmax(0,1.3fr) minmax(0,1fr) minmax(0,1fr); gap:12px; }
+.dbox { background:var(--surface); border:1px solid var(--line); border-radius:11px; padding:12px 14px; min-width:0; }
+.dbox h3 { font-size:11.5px; text-transform:uppercase; letter-spacing:.06em; color:var(--muted); font-weight:650; margin-bottom:8px; }
+.mini { width:100%; border-collapse:collapse; font-size:13px; }
+.mini td, .mini th { padding:5px 0; border-bottom:1px dashed var(--line); background:none; font-size:12.5px; }
+.mini th { font-weight:600; color:var(--muted); font-size:11.5px; }
+.mini tr:last-child td { border-bottom:0; }
+.mini td.num, .mini th.num { padding-left:10px; }
+.kv { display:grid; grid-template-columns:auto minmax(0,1fr); gap:5px 12px; font-size:12.5px; margin:0; }
+.kv dt { color:var(--muted); }
+.kv dd { margin:0; overflow-wrap:anywhere; }
+.danger { color:var(--bad); }
+.dactions { display:flex; gap:8px; margin-top:12px; flex-wrap:wrap; }
+.btn.sm { height:28px; font-size:12px; padding:0 10px; border-radius:7px; box-shadow:none; }
+.no-rows { padding:28px; text-align:center; color:var(--muted); }
+
+/* ---------- toasts ---------- */
+.toasts { position:fixed; right:20px; bottom:20px; z-index:50; display:grid; gap:8px; width:min(380px, calc(100vw - 32px)); }
+.toast { display:grid; grid-template-columns:28px minmax(0,1fr) 24px; gap:10px; align-items:start; padding:11px 12px; border-radius:12px; background:var(--surface); border:1px solid var(--line); box-shadow:var(--shadow-lg); animation:tin .2s ease-out; font-size:13px; }
+.toast .ti { width:28px; height:28px; border-radius:8px; display:grid; place-items:center; }
+.toast.ok .ti { background:var(--good-soft); color:var(--good); }
+.toast.dup .ti { background:var(--warn-soft); color:var(--warn); }
+.toast.err .ti { background:var(--bad-soft); color:var(--bad); }
+.toast.info .ti { background:var(--accent-soft); color:var(--accent); }
+.toast b { display:block; font-weight:650; overflow-wrap:anywhere; }
+.toast span { color:var(--muted); font-size:12.5px; overflow-wrap:anywhere; }
+.toast .x { border:0; background:none; cursor:pointer; color:var(--muted); width:24px; height:24px; border-radius:6px; display:grid; place-items:center; }
+.toast .x:hover { background:var(--surface-2); }
+@keyframes tin { from { opacity:0; transform:translateY(6px); } }
+
+footer { max-width:1320px; margin:auto; padding:0 24px 32px; color:var(--muted); font-size:12.5px; display:flex; justify-content:space-between; gap:12px; flex-wrap:wrap; }
+
+/* ---------- responsive ---------- */
+@media (max-width: 1180px) {
+  .kpis { grid-template-columns:repeat(3, minmax(0,1fr)); }
+  .cols { grid-template-columns:minmax(0,1fr); }
+  .dgrid { grid-template-columns:minmax(0,1fr) minmax(0,1fr); }
+}
+@media (max-width: 760px) {
+  .top { position:static; }
+  .top-in { padding:10px 16px; gap:10px; }
+  .brand p { display:none; }
+  #theme { order:1; }
+  .badge { order:2; box-shadow:none; }
+  .tools { order:3; width:100%; flex-wrap:nowrap; }
+  .tools .lbl-cal { display:none; }
+  .tools .month { flex:1; justify-content:space-between; }
+  .tools .month select { flex:1; }
+  .btn .lbl-long { display:none; }
+  main { padding:14px 16px 48px; gap:12px; }
+  footer { padding:0 16px 24px; }
+  .kpis { grid-template-columns:repeat(2, minmax(0,1fr)); gap:10px; }
+  .kpi:first-child { grid-column:1 / -1; }
+  .kpi .val { font-size:22px; }
+  .kpi .foot { white-space:normal; }
+  .steps { grid-template-columns:minmax(0,1fr); }
+  .drop:not(.big) { flex-wrap:wrap; gap:12px; padding:14px; }
+  .drop:not(.big) .up { width:36px; height:36px; }
+  .drop:not(.big) #drop-sub { display:none; }
+  .drop:not(.big) .txt { flex:1 1 160px; }
+  .drop:not(.big) .try { flex:1 1 100%; justify-content:stretch; }
+  .drop:not(.big) .try > * { flex:1; }
+  .drop.big { padding:28px 16px; }
+  .crow { grid-template-columns: minmax(0,1fr) auto auto; grid-template-areas:"nm amt pct" "bar bar bar"; gap:4px 10px; }
+  .crow .nm { grid-area:nm; } .crow .amt { grid-area:amt; } .crow .pct { grid-area:pct; min-width:32px; } .crow svg { grid-area:bar; height:10px; }
+  .facts { grid-template-columns:minmax(0,1fr); }
+  .dgrid { grid-template-columns:minmax(0,1fr); }
+  .filters { padding:12px; }
+  .search { max-width:none; flex-basis:100%; }
+  .filters .sel, .filters .chipbtn { flex:1 1 40%; min-width:0; justify-content:center; }
+  .count { margin-left:0; width:100%; }
+  .tbl-wrap > table > thead { display:none; }
+  .tbl-wrap > table, .tbl-wrap > table > tbody { display:block; }
+  tr.inv { display:grid; grid-template-columns:30px minmax(0,1fr) auto; grid-template-areas:"exp sup total" ". date due" ". cat paid"; gap:6px 8px; padding:12px 12px 12px 6px; border-bottom:1px solid var(--line); align-items:center; }
+  tr.inv td { padding:0; border:0; background:none !important; }
+  tr.inv.open { background:var(--surface-2); border-bottom-color:transparent; }
+  .c-exp { grid-area:exp; align-self:start; } .c-sup { grid-area:sup; } .c-total { grid-area:total; font-weight:700; align-self:start; }
+  .c-date { grid-area:date; font-size:12.5px; color:var(--muted); text-align:left !important; } .c-due { grid-area:due; text-align:right; }
+  .c-cat { grid-area:cat; } .c-paid { grid-area:paid; justify-self:end; }
+  .c-src, .c-tax, .c-vat { display:none; }
+  .status .d { display:none; }
+  .sup b { max-width:none; white-space:normal; }
+  .sup span { white-space:normal; display:block; }
+  tr.details { display:block; }
+  tr.details > td { display:block; padding:0 12px 14px; }
+  .toasts { right:16px; bottom:16px; }
+}
+@media (prefers-reduced-motion: reduce) { * { animation:none !important; transition:none !important; } }
 </style>
 </head>
 <body>
-<header>
-  <div>
-    <h1>Invoice<span>Lens</span></h1>
-    <p class="sub">Your invoices, sorted by an open model that never leaves your machine.</p>
-  </div>
-  <div class="row">
-    <input type="month" id="month">
-    <a href="/api/export.csv"><button>Export CSV</button></a>
-    <button id="demo" hidden>Load demo invoices</button>
+<header class="top">
+  <div class="top-in">
+    <div class="brand">
+      <div class="logo" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h4"/><path d="M14 3v4a1 1 0 0 0 1 1h4"/><path d="M19 8v3"/><circle cx="16" cy="16" r="3.2"/><path d="m18.4 18.4 2.1 2.1"/></svg></div>
+      <div style="min-width:0">
+        <h1>Invoice<span>Lens</span></h1>
+        <p>Italian e-invoices, sorted by an open model on your own machine</p>
+      </div>
+    </div>
+    <span class="badge" id="model-badge" role="status" title="Checking the model endpoint"><span class="dot"></span><span>Checking model…</span></span>
+    <div class="tools">
+      <div class="month" role="group" aria-label="Month">
+        <button type="button" id="m-prev" aria-label="Previous month"><svg class="i" viewBox="0 0 24 24"><path d="m15 18-6-6 6-6"/></svg></button>
+        <label for="month" class="sr-only">Month shown on the dashboard</label>
+        <select id="month"></select>
+        <button type="button" id="m-next" aria-label="Next month"><svg class="i" viewBox="0 0 24 24"><path d="m9 18 6-6-6-6"/></svg></button>
+      </div>
+      <a class="btn" href="/api/export.csv" download title="CSV with ; separator and decimal comma, opens in Italian-locale spreadsheets"><svg class="i" viewBox="0 0 24 24"><path d="M12 3v12"/><path d="m7 10 5 5 5-5"/><path d="M5 21h14"/></svg>CSV</a>
+      <a class="btn" href="/api/deadlines.ics" download title="Unpaid due dates as calendar events, with a reminder two days before"><svg class="i" viewBox="0 0 24 24"><rect x="3" y="5" width="18" height="16" rx="2"/><path d="M16 3v4M8 3v4M3 10h18"/></svg><span class="lbl-cal">Calendar<span class="lbl-long"> .ics</span></span></a>
+    </div>
+    <button class="btn icon ghost" id="theme" type="button" aria-label="Theme: system"></button>
   </div>
 </header>
-<main>
-  <div class="card">
-    <div id="drop">Drop FatturaPA <b>.xml</b> / <b>.p7m</b>, <b>.pdf</b> invoices, or the monthly <b>.zip</b> from the Agenzia delle Entrate portal
-      <input id="file" type="file" multiple accept=".xml,.p7m,.pdf,.zip" hidden></div>
-    <p id="status" class="muted" style="margin:8px 0 0"></p>
-  </div>
 
-  <div class="grid">
-    <div class="card"><div class="label">Invoices this month</div><div class="kpi" id="k-count">0</div></div>
-    <div class="card"><div class="label">Taxable spend</div><div class="kpi" id="k-taxable">€0</div></div>
-    <div class="card"><div class="label">Deductible VAT paid</div><div class="kpi" id="k-vat">€0</div></div>
-    <div class="card"><div class="label">Things to check</div><div class="kpi" id="k-anom">0</div></div>
-  </div>
+<main id="main">
+  <section id="upload-sec" aria-label="Import invoices">
+    <div class="drop" id="drop">
+      <div class="up" aria-hidden="true"><svg class="i" viewBox="0 0 24 24"><path d="M12 16V4"/><path d="m7 9 5-5 5 5"/><path d="M20 16v3a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2v-3"/></svg></div>
+      <div class="txt">
+        <b id="drop-title">Drop invoices here</b>
+        <div id="drop-sub">FatturaPA XML, signed .p7m, PDF, or the monthly ZIP from the Agenzia delle Entrate portal. Duplicates are skipped.</div>
+        <div class="exts" aria-hidden="true"><span>.xml</span><span>.p7m</span><span>.pdf</span><span>.zip</span></div>
+        <div class="progress" id="progress" aria-live="polite">
+          <div class="bar-track"><div class="bar-fill" id="progress-fill"></div></div>
+          <p id="progress-text"></p>
+        </div>
+      </div>
+      <div class="try" id="drop-actions">
+        <label class="btn primary" for="file" id="choose" tabindex="0" role="button"><svg class="i" viewBox="0 0 24 24"><path d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8z"/><path d="M14 3v5h5"/></svg>Choose files</label>
+        <button class="btn" type="button" id="samples" hidden><svg class="i" viewBox="0 0 24 24"><path d="M12 3l1.9 5.1L19 10l-5.1 1.9L12 17l-1.9-5.1L5 10l5.1-1.9z"/></svg>Try with sample invoices</button>
+      </div>
+      <input id="file" type="file" multiple accept=".xml,.p7m,.pdf,.zip" class="sr-only" tabindex="-1">
+    </div>
+  </section>
 
-  <div class="grid">
-    <div class="card"><h3 style="margin-top:0">By category</h3><div id="cats" class="muted">No invoices yet.</div></div>
-    <div class="card"><div class="row" style="justify-content:space-between"><h3 style="margin:0 0 12px">Due in the next 30 days</h3><a href="/api/deadlines.ics"><button>Add to calendar</button></a></div><div id="due" class="muted">Nothing due.</div></div>
-  </div>
+  <section id="empty" class="empty" hidden>
+    <div class="steps">
+      <div class="step"><div class="n">1</div><b>Import a month</b><p>Drop the ZIP from <i>Fatture e Corrispettivi</i>, or single XML, .p7m and PDF files. Nothing leaves your machine.</p></div>
+      <div class="step"><div class="n">2</div><b>The model sorts it</b><p>An open model (Gemma by default) names a category and a one-line reason for each expense. You can override any of them.</p></div>
+      <div class="step"><div class="n">3</div><b>Check, then export</b><p>Duplicates, VAT that does not match the rate and overdue payments are flagged in code. Export CSV for your accountant.</p></div>
+    </div>
+    <p class="muted" id="empty-hint" style="text-align:center;margin:0"></p>
+  </section>
 
-  <div class="card">
-    <div class="row" style="justify-content:space-between"><h3 style="margin:0">Monthly summary</h3>
-      <button class="primary" id="sum-btn">Write summary with the model</button></div>
-    <div id="summary" class="muted" style="margin-top:8px">The local model writes a short summary in Italian and English from the numbers above.</div>
-  </div>
+  <div id="dash" hidden>
+    <div class="stack">
+      <section class="kpis" aria-label="Key figures">
+        <div class="card kpi accent"><div class="lbl"><span class="ic"><svg class="i" viewBox="0 0 24 24"><path d="M4 19V5M4 19h16"/><path d="m7 14 4-4 3 3 5-6"/></svg></span>Spend this month</div><div class="val" id="k-spend">–</div><div class="foot" id="k-spend-f">&nbsp;</div></div>
+        <div class="card kpi"><div class="lbl"><span class="ic"><svg class="i" viewBox="0 0 24 24"><path d="M19 5 5 19"/><circle cx="7" cy="7" r="2.5"/><circle cx="17" cy="17" r="2.5"/></svg></span>Deductible VAT</div><div class="val" id="k-vat">–</div><div class="foot" id="k-vat-f">&nbsp;</div></div>
+        <div class="card kpi"><div class="lbl"><span class="ic"><svg class="i" viewBox="0 0 24 24"><path d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8z"/><path d="M14 3v5h5M9 13h6M9 17h4"/></svg></span>Invoices</div><div class="val" id="k-count">–</div><div class="foot" id="k-count-f">&nbsp;</div></div>
+        <div class="card kpi"><div class="lbl"><span class="ic"><svg class="i" viewBox="0 0 24 24"><rect x="3" y="5" width="18" height="16" rx="2"/><path d="M16 3v4M8 3v4M3 10h18"/></svg></span>Due in 30 days</div><div class="val" id="k-due">–</div><div class="foot" id="k-due-f">&nbsp;</div></div>
+        <div class="card kpi" id="k-anom-card"><div class="lbl"><span class="ic"><svg class="i" viewBox="0 0 24 24"><path d="M12 3 2 20h20z"/><path d="M12 10v4M12 17h.01"/></svg></span>Needs attention</div><div class="val" id="k-anom">–</div><div class="foot" id="k-anom-f">&nbsp;</div></div>
+      </section>
 
-  <div class="card scroll">
-    <h3 style="margin-top:0">Invoices</h3>
-    <table><thead><tr><th>Date</th><th>Supplier</th><th>Category</th><th class="num">Taxable</th><th class="num">VAT</th><th class="num">Total</th><th>Paid</th></tr></thead>
-    <tbody id="rows"></tbody></table>
+      <div class="cols">
+        <section class="card" aria-labelledby="h-cat">
+          <div class="card-h"><div><h2 id="h-cat">Spend by category</h2><div class="sub" id="cat-sub">Taxable amount, before VAT</div></div></div>
+          <div class="card-b"><div id="share" class="share" aria-hidden="true"></div><div id="chart" class="chart"></div><div class="chart-foot" id="chart-foot"></div></div>
+        </section>
+        <section class="card" aria-labelledby="h-anom">
+          <div class="card-h"><div><h2 id="h-anom">Needs attention</h2><div class="sub">Checked with arithmetic, not the model</div></div><span class="pill" id="anom-count"></span></div>
+          <div class="card-b"><div id="anoms" class="alist"></div></div>
+        </section>
+      </div>
+
+      <div class="cols">
+        <section class="card" aria-labelledby="h-sum">
+          <div class="card-h"><div><h2 id="h-sum">Monthly summary</h2><div class="sub">Numbers computed in code; the narrative is written by the model from those numbers only</div></div>
+            <button class="btn primary" type="button" id="sum-btn"><svg class="i" viewBox="0 0 24 24"><path d="M12 3l1.9 5.1L19 10l-5.1 1.9L12 17l-1.9-5.1L5 10l5.1-1.9z"/><path d="M19 17v4M17 19h4"/></svg><span id="sum-lbl">Write summary</span></button></div>
+          <div class="card-b"><ul class="facts" id="facts"></ul><div id="narr" aria-live="polite"></div></div>
+        </section>
+        <section class="card" aria-labelledby="h-due">
+          <div class="card-h"><div><h2 id="h-due">Due in the next 30 days</h2><div class="sub">Unpaid invoices, all months</div></div>
+            <a class="btn sm" href="/api/deadlines.ics" download>Add to calendar</a></div>
+          <div class="card-b"><div id="due" class="due"></div></div>
+        </section>
+      </div>
+
+      <section class="card" aria-labelledby="h-inv" id="inv-sec">
+        <div class="card-h" style="padding-bottom:2px"><div><h2 id="h-inv">Invoices</h2><div class="sub">Click a row for lines, VAT summary and the model's reason. Change a category inline to override it.</div></div></div>
+        <div class="filters" role="search">
+          <div class="search"><svg class="i" viewBox="0 0 24 24"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg>
+            <label for="q" class="sr-only">Search invoices</label><input id="q" type="search" placeholder="Search supplier, number, line…" autocomplete="off"></div>
+          <label for="f-scope" class="sr-only">Period</label>
+          <select id="f-scope" class="sel"><option value="month">Selected month</option><option value="all">All months</option></select>
+          <label for="f-cat" class="sr-only">Category</label>
+          <select id="f-cat" class="sel"><option value="">All categories</option></select>
+          <button type="button" class="chipbtn" id="f-attn" aria-pressed="false">Needs attention <span class="ct" id="ct-attn">0</span></button>
+          <button type="button" class="chipbtn" id="f-unpaid" aria-pressed="false">Unpaid <span class="ct" id="ct-unpaid">0</span></button>
+          <span class="count" id="count" aria-live="polite"></span>
+        </div>
+        <div class="tbl-wrap">
+          <table>
+            <caption class="sr-only">Invoices</caption>
+            <thead><tr>
+              <th scope="col"><span class="sr-only">Details</span></th>
+              <th scope="col" data-sort="date"><button type="button">Date <span class="arrow">▼</span></button></th>
+              <th scope="col" data-sort="supplier"><button type="button">Supplier <span class="arrow">▲</span></button></th>
+              <th scope="col" data-sort="category"><button type="button">Category <span class="arrow">▲</span></button></th>
+              <th scope="col">Source</th>
+              <th scope="col" class="num" data-sort="taxable"><button type="button">Taxable <span class="arrow">▼</span></button></th>
+              <th scope="col" class="num" data-sort="vat"><button type="button">VAT <span class="arrow">▼</span></button></th>
+              <th scope="col" class="num" data-sort="total"><button type="button">Total <span class="arrow">▼</span></button></th>
+              <th scope="col" data-sort="due"><button type="button">Due <span class="arrow">▲</span></button></th>
+              <th scope="col">Paid</th>
+            </tr></thead>
+            <tbody id="rows"></tbody>
+          </table>
+        </div>
+      </section>
+    </div>
   </div>
 </main>
+<footer>
+  <span>Amounts in EUR. VAT, totals and duplicates are computed in code; the model only categorizes, reads PDFs and writes the summary.</span>
+  <span id="foot-model"></span>
+</footer>
+<div class="toasts" id="toasts" aria-live="polite" aria-atomic="false"></div>
+<noscript><p style="padding:24px">InvoiceLens needs JavaScript for its dashboard. The API is still available under <code>/api</code>.</p></noscript>
+
 <script>
-const CATS = ["software","hardware","travel","meals","office","utilities","telecom","professional_services","training","marketing","rent","other"];
-const eur = n => new Intl.NumberFormat("it-IT", {style:"currency", currency:"EUR"}).format(n);
-const esc = s => String(s ?? "").replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
+"use strict";
 const $ = id => document.getElementById(id);
-const month = $("month");
-month.value = new Date().toISOString().slice(0, 7);
+const esc = s => String(s ?? "").replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
+const eurFmt = new Intl.NumberFormat("en-IE", {style:"currency", currency:"EUR"});
+const eur = n => eurFmt.format(n || 0);
+const eur0 = n => new Intl.NumberFormat("en-IE", {style:"currency", currency:"EUR", maximumFractionDigits:0}).format(n || 0);
+const pad = n => String(n).padStart(2, "0");
+const todayIso = (() => { const d = new Date(); return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`; })();
+const parseIso = s => { const [y, m, d] = s.split("-").map(Number); return new Date(y, m - 1, d || 1); };
+const fmtDate = s => s ? parseIso(s).toLocaleDateString("en-GB", {day:"numeric", month:"short", year:"numeric"}) : "–";
+const fmtMonth = m => parseIso(m + "-01").toLocaleDateString("en-GB", {month:"long", year:"numeric"});
+const daysBetween = (a, b) => Math.round((parseIso(b) - parseIso(a)) / 86400000);
+const shiftMonth = (m, k) => { const d = parseIso(m + "-01"); d.setMonth(d.getMonth() + k); return `${d.getFullYear()}-${pad(d.getMonth() + 1)}`; };
+
+const LABELS = {software:"Software", hardware:"Hardware", travel:"Travel", meals:"Meals", office:"Office", utilities:"Utilities", telecom:"Telecom", professional_services:"Professional services", training:"Training", marketing:"Marketing", rent:"Rent", other:"Other"};
+const catLabel = c => LABELS[c] || String(c).replace(/_/g, " ");
+const catColor = c => `var(--c-${LABELS[c] ? c : "other"})`;
+
+const IC = {
+  dup: '<svg class="i" viewBox="0 0 24 24"><rect x="8" y="8" width="12" height="12" rx="2"/><path d="M16 8V6a2 2 0 0 0-2-2H6a2 2 0 0 0-2 2v8a2 2 0 0 0 2 2h2"/></svg>',
+  vat: '<svg class="i" viewBox="0 0 24 24"><path d="M19 5 5 19"/><circle cx="7" cy="7" r="2.5"/><circle cx="17" cy="17" r="2.5"/></svg>',
+  sum: '<svg class="i" viewBox="0 0 24 24"><path d="M18 5H6l6 7-6 7h12"/></svg>',
+  clock: '<svg class="i" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg>',
+  check: '<svg class="i" viewBox="0 0 24 24"><path d="m5 12 5 5 9-10"/></svg>',
+  x: '<svg class="i" viewBox="0 0 24 24"><path d="M18 6 6 18M6 6l12 12"/></svg>',
+  alert: '<svg class="i" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M12 8v5M12 16h.01"/></svg>',
+  info: '<svg class="i" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M12 11v5M12 8h.01"/></svg>',
+  chev: '<svg class="i" viewBox="0 0 24 24"><path d="m9 18 6-6-6-6"/></svg>',
+  spark: '<svg class="i" viewBox="0 0 24 24"><path d="M12 3l1.9 5.1L19 10l-5.1 1.9L12 17l-1.9-5.1L5 10l5.1-1.9z"/></svg>',
+  rules: '<svg class="i" viewBox="0 0 24 24"><path d="M4 6h16M4 12h10M4 18h6"/></svg>',
+  hand: '<svg class="i" viewBox="0 0 24 24"><path d="M12 20h9"/><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4z"/></svg>',
+  trash: '<svg class="i" viewBox="0 0 24 24"><path d="M4 7h16M10 11v6M14 11v6M6 7l1 13h10l1-13M9 7V4h6v3"/></svg>',
+  sun: '<svg class="i" viewBox="0 0 24 24"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4"/></svg>',
+  moon: '<svg class="i" viewBox="0 0 24 24"><path d="M20 14.5A8 8 0 1 1 9.5 4a6.5 6.5 0 0 0 10.5 10.5z"/></svg>',
+  auto: '<svg class="i" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M12 3v18" /><path d="M12 3a9 9 0 0 1 0 18z" fill="currentColor" stroke="none"/></svg>',
+};
+
+const KINDS = {
+  duplicate: {title:"Possible duplicate", tone:"bad", icon:IC.dup, why:"Same supplier, number and year as another invoice. Paying or deducting it twice is an easy mistake."},
+  vat_mismatch: {title:"VAT does not match the rate", tone:"bad", icon:IC.vat, why:"Taxable × rate gives a different VAT. Ask the supplier for a corrected invoice before you deduct it."},
+  total_mismatch: {title:"Total does not add up", tone:"warn", icon:IC.sum, why:"Often withholding tax (ritenuta d'acconto) or stamp duty (bollo). Check before paying the declared amount."},
+  overdue: {title:"Overdue payment", tone:"warn", icon:IC.clock, why:"Unpaid past its due date. If you already paid it, mark it paid in the table."},
+};
+const kind = k => KINDS[k] || {title:k, tone:"warn", icon:IC.alert, why:""};
+
+const state = {
+  cfg: {categories: Object.keys(LABELS), model: "model", model_reachable: false, uploads_enabled: true, can_load_samples: false, demo: false},
+  invoices: [], dash: null, month: todayIso.slice(0, 7), months: [],
+  sort: {key: "date", dir: -1}, f: {q: "", cat: "", attn: false, unpaid: false, scope: "month"},
+  open: new Set(), summary: {}, loaded: false,
+};
 
 async function api(path, opts) {
   const r = await fetch(path, opts);
-  if (!r.ok) throw new Error((await r.json().catch(() => ({}))).detail || r.statusText);
-  return r.json();
+  const body = await r.json().catch(() => ({}));
+  if (!r.ok) { const e = new Error(body.detail || r.statusText); e.status = r.status; throw e; }
+  return body;
+}
+const json = (method, data) => ({method, headers: {"Content-Type": "application/json"}, body: JSON.stringify(data)});
+
+/* ---------- theme ---------- */
+const THEMES = ["system", "light", "dark"];
+let theme = "system";
+try { theme = localStorage.getItem("invoicelens-theme") || "system"; } catch (_) {}
+function applyTheme() {
+  if (theme === "system") document.documentElement.removeAttribute("data-theme");
+  else document.documentElement.setAttribute("data-theme", theme);
+  const b = $("theme");
+  b.innerHTML = theme === "dark" ? IC.moon : theme === "light" ? IC.sun : IC.auto;
+  b.setAttribute("aria-label", `Theme: ${theme}. Click to change.`);
+  b.title = `Theme: ${theme}`;
+}
+$("theme").onclick = () => { theme = THEMES[(THEMES.indexOf(theme) + 1) % 3]; try { localStorage.setItem("invoicelens-theme", theme); } catch (_) {} applyTheme(); };
+applyTheme();
+
+/* ---------- toasts ---------- */
+function toast(kindName, title, detail, ms = 6500) {
+  const icon = {ok: IC.check, dup: IC.dup, err: IC.alert, info: IC.info}[kindName];
+  const el = document.createElement("div");
+  el.className = `toast ${kindName}`;
+  el.setAttribute("role", kindName === "err" ? "alert" : "status");
+  el.innerHTML = `<div class="ti">${icon}</div><div><b>${esc(title)}</b>${detail ? `<span>${esc(detail)}</span>` : ""}</div><button class="x" type="button" aria-label="Dismiss">${IC.x}</button>`;
+  el.querySelector(".x").onclick = () => el.remove();
+  const box = $("toasts");
+  box.appendChild(el);
+  while (box.children.length > 5) box.firstElementChild.remove();
+  if (ms) setTimeout(() => el.remove(), ms);
 }
 
+/* ---------- config / status badge ---------- */
+async function loadConfig() {
+  try { state.cfg = {...state.cfg, ...(await api("/api/config"))}; } catch (_) {}
+  const c = state.cfg, b = $("model-badge");
+  b.className = "badge " + (c.model_reachable ? "on" : "off");
+  b.innerHTML = c.model_reachable
+    ? `<span class="dot"></span><span><b>${esc(c.model)}</b> · connected</span>`
+    : `<span class="dot"></span><span><b>${esc(c.model)}</b> offline · rules fallback</span>`;
+  b.title = c.model_reachable
+    ? "The model endpoint answers. New invoices are categorized by the model."
+    : "The model endpoint is not reachable. Invoices are still parsed and checked; categories fall back to keyword rules (labelled 'rules').";
+  $("foot-model").textContent = c.demo ? "Public demo: sample invoices only, uploads disabled." : `Model: ${c.model}`;
+  $("sum-lbl").textContent = `Write summary with ${c.model}`;
+  const sel = $("f-cat");
+  if (sel.options.length === 1) sel.insertAdjacentHTML("beforeend", c.categories.map(k => `<option value="${esc(k)}">${esc(catLabel(k))}</option>`).join(""));
+  renderUploadZone();
+}
+
+/* ---------- data ---------- */
 async function refresh() {
-  const [list, dash] = await Promise.all([api("/api/invoices"), api("/api/dashboard?month=" + month.value)]);
-  $("k-count").textContent = dash.invoice_count;
-  $("k-taxable").textContent = eur(dash.taxable_total);
-  $("k-vat").textContent = eur(dash.vat_total);
-  $("k-anom").textContent = dash.anomalies.length;
-  const max = Math.max(1, ...Object.values(dash.by_category));
-  $("cats").innerHTML = Object.entries(dash.by_category).map(([c, v]) =>
-    `<div style="margin-bottom:8px"><div class="row" style="justify-content:space-between"><span>${esc(c.replace("_"," "))}</span><span>${eur(v)}</span></div>
-     <div class="bar" style="width:${(v / max * 100).toFixed(0)}%"></div></div>`).join("") || "No invoices this month.";
-  $("due").innerHTML = dash.upcoming_payments.map(p =>
-    `<div class="row" style="justify-content:space-between"><span>${esc(p.due_date)} · ${esc(p.supplier)}</span><b>${eur(p.amount)}</b></div>`).join("") || "Nothing due.";
-  $("rows").innerHTML = list.slice().reverse().map(r => {
-    const i = r.invoice;
-    const opts = CATS.map(c => `<option ${c === r.category ? "selected" : ""}>${c}</option>`).join("");
-    const notes = r.anomalies.map(a => `<div class="warn ${a.kind === "duplicate" || a.kind === "overdue" ? "bad" : ""}">⚠ ${esc(a.message)}</div>`).join("");
-    return `<tr><td>${esc(i.date)}</td>
-      <td>${esc(i.supplier.name)}<div class="muted" style="font-size:12px">n. ${esc(i.number)} · ${esc(i.lines.map(l => l.description).join(", "))}</div>${notes}</td>
-      <td><select data-cat="${r.id}">${opts}</select><div class="muted" style="font-size:12px">${esc(r.category_source)}: ${esc(r.category_reason)}</div></td>
-      <td class="num">${eur(i.taxable)}</td><td class="num">${eur(i.tax)}</td><td class="num">${eur(i.total)}</td>
-      <td><input type="checkbox" data-paid="${r.id}" ${r.paid ? "checked" : ""}></td></tr>`;
+  const [list, dash] = await Promise.all([api("/api/invoices"), api("/api/dashboard?month=" + state.month)]);
+  state.invoices = list; state.dash = dash; state.loaded = true;
+  render();
+}
+async function setMonth(m) {
+  state.month = m;
+  await refresh();
+}
+
+function render() {
+  const has = state.invoices.length > 0;
+  $("empty").hidden = has; $("dash").hidden = !has;
+  renderUploadZone();
+  renderMonths();
+  if (!has) return;
+  renderKpis(); renderChart(); renderAnoms(); renderDue(); renderFacts(); renderNarr(); renderTable();
+}
+
+function renderUploadZone() {
+  const c = state.cfg, has = state.invoices.length > 0, drop = $("drop");
+  drop.classList.toggle("big", !has && state.loaded);
+  drop.classList.toggle("disabled", !c.uploads_enabled);
+  $("choose").hidden = !c.uploads_enabled;
+  $("samples").hidden = !c.can_load_samples || (has && !c.demo);
+  $("samples").innerHTML = `${IC.spark}${has ? "Reset to sample invoices" : "Try with sample invoices"}`;
+  if (!c.uploads_enabled) {
+    $("drop-title").textContent = "Uploads are off in the public demo";
+    $("drop-sub").innerHTML = "This shared server only shows the bundled fake invoices. Run InvoiceLens locally (<code>docker compose up</code>) to import your own; they never leave your machine.";
+  } else {
+    $("drop-title").textContent = has ? "Drop more invoices here" : "Drop this month's invoices here";
+    $("drop-sub").textContent = "FatturaPA XML, signed .p7m, PDF, or the monthly ZIP from the Agenzia delle Entrate portal. Re-imported invoices are skipped.";
+  }
+  $("empty-hint").innerHTML = c.can_load_samples
+    ? "No invoices yet. Use the sample button to explore with ten fake invoices, or drop your own."
+    : "Fake invoices to try it with are in the <code>samples/</code> folder of the repository.";
+}
+
+function renderMonths() {
+  const set = new Set(state.invoices.map(r => (r.invoice.date || "").slice(0, 7)).filter(Boolean));
+  set.add(todayIso.slice(0, 7)); set.add(state.month);
+  state.months = [...set].sort().reverse();
+  const counts = {};
+  for (const r of state.invoices) { const m = (r.invoice.date || "").slice(0, 7); counts[m] = (counts[m] || 0) + 1; }
+  $("month").innerHTML = state.months.map(m => `<option value="${m}" ${m === state.month ? "selected" : ""}>${esc(fmtMonth(m))}${counts[m] ? "" : " (empty)"}</option>`).join("");
+}
+
+function inScope(r) { return state.f.scope === "all" || (r.invoice.date || "").startsWith(state.month); }
+
+function renderKpis() {
+  const d = state.dash, inMonth = state.invoices.filter(r => (r.invoice.date || "").startsWith(state.month));
+  const gross = inMonth.reduce((s, r) => s + r.invoice.total, 0);
+  $("k-spend").textContent = eur(d.taxable_total);
+  $("k-spend-f").textContent = d.invoice_count ? `${eur(gross)} including VAT` : `No invoices in ${fmtMonth(state.month)}`;
+  $("k-vat").textContent = eur(d.vat_total);
+  $("k-vat-f").textContent = d.taxable_total ? `${(d.vat_total / d.taxable_total * 100).toFixed(1)}% of taxable spend` : "–";
+  $("k-count").textContent = d.invoice_count;
+  const suppliers = new Set(inMonth.map(r => r.invoice.supplier.vat_number || r.invoice.supplier.name)).size;
+  const unpaid = inMonth.filter(r => !r.paid).length;
+  $("k-count-f").textContent = `${suppliers} supplier${suppliers === 1 ? "" : "s"} · ${unpaid} unpaid`;
+  const up = d.upcoming_payments, dueSum = up.reduce((s, p) => s + p.amount, 0);
+  $("k-due").textContent = eur(dueSum);
+  $("k-due-f").textContent = up.length ? `${up.length} payment${up.length === 1 ? "" : "s"} · next ${fmtDate(up[0].due_date).replace(/ \d{4}$/, "")}` : "Nothing due";
+  const n = d.anomalies.length, by = {};
+  for (const a of d.anomalies) by[a.kind] = (by[a.kind] || 0) + 1;
+  $("k-anom").textContent = n;
+  $("k-anom-card").classList.toggle("alert", n > 0);
+  const short = {duplicate:"duplicate", vat_mismatch:"VAT", total_mismatch:"total", overdue:"overdue"};
+  $("k-anom-f").textContent = n ? Object.entries(by).map(([k, v]) => `${v} ${short[k] || k}`).join(" · ") : "All checks passed";
+}
+
+function renderChart() {
+  const d = state.dash, entries = Object.entries(d.by_category), total = d.taxable_total || 1;
+  $("cat-sub").textContent = `Taxable amount before VAT, ${fmtMonth(state.month)}`;
+  if (!entries.length) {
+    $("share").innerHTML = "";
+    $("chart").innerHTML = `<p class="muted" style="margin:6px 0 0">No invoices in ${esc(fmtMonth(state.month))}. Pick another month above.</p>`;
+    $("chart-foot").innerHTML = ""; return;
+  }
+  const max = Math.max(...entries.map(([, v]) => v));
+  $("share").innerHTML = entries.map(([c, v]) => `<span style="flex:${v};background:${catColor(c)}" title="${esc(catLabel(c))} ${eur(v)}"></span>`).join("");
+  $("chart").innerHTML = entries.map(([c, v]) => {
+    const w = Math.max(1.5, v / max * 100), pct = v / total * 100;
+    return `<div class="crow" title="${esc(catLabel(c))}: ${eur(v)} (${pct.toFixed(1)}%)">
+      <span class="nm"><span class="sw" style="background:${catColor(c)}"></span>${esc(catLabel(c))}</span>
+      <svg role="img" aria-label="${esc(catLabel(c))} ${eur(v)}">
+        <rect x="0" y="0" width="100%" height="100%" rx="4" fill="var(--surface-2)"/>
+        <rect x="0" y="0" width="${w.toFixed(2)}%" height="100%" rx="4" fill="${catColor(c)}"/>
+      </svg>
+      <span class="amt">${eur(v)}</span><span class="pct">${pct.toFixed(0)}%</span></div>`;
+  }).join("");
+  const inMonth = state.invoices.filter(r => (r.invoice.date || "").startsWith(state.month));
+  const src = {};
+  for (const r of inMonth) { const s = sourceKind(r); src[s.label] = src[s.label] || {n: 0, s}; src[s.label].n++; }
+  const parts = Object.values(src).map(({n, s}) => `<span class="src ${s.cls}">${s.icon}${esc(s.label)} ×${n}</span>`).join(" ");
+  const rulesOnly = inMonth.some(r => r.category_source === "rules");
+  $("chart-foot").innerHTML = `<span>Categorized by</span> ${parts}` + (rulesOnly
+    ? `<span style="flex-basis:100%">"rules" means the model was not reachable at import time, so a keyword list picked the category. Override any of them in the table.</span>` : "");
+}
+
+function sourceKind(r) {
+  const s = r.category_source;
+  if (s === "rules") return {label: "rules", cls: "", icon: IC.rules, tip: "Keyword fallback: the model was not reachable when this invoice was imported."};
+  if (s === "manual" || s === "user") return {label: "manual", cls: "manual", icon: IC.hand, tip: "Category set by you."};
+  return {label: s, cls: "model", icon: IC.spark, tip: `Categorized by ${s}.`};
+}
+
+function renderAnoms() {
+  const list = state.dash.anomalies;
+  $("anom-count").textContent = list.length ? `${list.length} to check` : "";
+  $("anom-count").className = "pill " + (list.length ? "warn" : "");
+  if (!list.length) {
+    $("anoms").innerHTML = `<div class="ok-state">${IC.check}<span>No duplicates, VAT errors or overdue payments in ${esc(fmtMonth(state.month))}.</span></div>`;
+    return;
+  }
+  const order = {duplicate: 0, vat_mismatch: 1, total_mismatch: 2, overdue: 3};
+  $("anoms").innerHTML = list.slice().sort((a, b) => (order[a.kind] ?? 9) - (order[b.kind] ?? 9)).map(a => {
+    const k = kind(a.kind);
+    return `<div class="anom ${k.tone}"><div class="ai">${k.icon}</div><div>
+      <div class="t"><b>${esc(k.title)}</b><button class="link" type="button" data-goto="${a.invoice_id}">View invoice</button></div>
+      <div class="who">${esc(a.supplier)} · #${a.invoice_id}</div>
+      <div class="msg">${esc(a.message)}</div><div class="why">${esc(k.why)}</div></div></div>`;
   }).join("");
 }
 
-async function upload(files) {
-  if (!files.length) return;
-  const fd = new FormData();
-  for (const f of files) fd.append("files", f);
-  $("status").textContent = `Reading ${files.length} file(s)… the model categorizes each invoice locally.`;
+function renderDue() {
+  const up = state.dash.upcoming_payments;
+  if (!up.length) { $("due").innerHTML = `<p class="muted" style="margin:0">Nothing unpaid is due in the next 30 days.</p>`; return; }
+  $("due").innerHTML = up.map(p => {
+    const d = parseIso(p.due_date), left = daysBetween(todayIso, p.due_date);
+    const when = left === 0 ? "due today" : left === 1 ? "due tomorrow" : `in ${left} days`;
+    return `<div class="drow"><div class="cal" aria-hidden="true"><i>${d.toLocaleDateString("en-GB", {month:"short"})}</i><b>${d.getDate()}</b></div>
+      <div style="min-width:0"><div class="s">${esc(p.supplier)}</div><div class="when"><span class="${left <= 7 ? "st-warn" : ""}">${when}</span> · ${esc(fmtDate(p.due_date))}</div></div>
+      <div class="a">${eur(p.amount)}</div></div>`;
+  }).join("") + `<div class="due-total"><span>Total</span><span class="num">${eur(up.reduce((s, p) => s + p.amount, 0))}</span></div>`;
+}
+
+function renderFacts() {
+  const d = state.dash, cats = Object.entries(d.by_category);
+  const top = cats[0], up = d.upcoming_payments;
+  const overdue = state.invoices.filter(r => !r.paid && r.anomalies.some(a => a.kind === "overdue"));
+  const items = [
+    ["Biggest category", top ? `<b>${esc(catLabel(top[0]))}</b> · ${eur(top[1])} (${(top[1] / (d.taxable_total || 1) * 100).toFixed(0)}%)` : "–"],
+    ["VAT you can reclaim", `<b>${eur(d.vat_total)}</b> on ${eur(d.taxable_total)} taxable`],
+    ["To check", d.anomalies.length ? `<b>${d.anomalies.length}</b> flagged in ${d.invoice_count} invoices` : "<b>Nothing</b>, all checks passed"],
+    ["Cash out next 30 days", up.length ? `<b>${eur(up.reduce((s, p) => s + p.amount, 0))}</b> in ${up.length} payment${up.length === 1 ? "" : "s"}` : "<b>Nothing</b> due"],
+  ];
+  if (overdue.length) items[3][1] += ` <span class="st-warn">+ ${overdue.length} overdue</span>`;
+  $("facts").innerHTML = items.map(([k, v]) => `<li><span>${k}</span>${v}</li>`).join("");
+}
+
+function renderNarr() {
+  const s = state.summary[state.month], box = $("narr"), btn = $("sum-btn");
+  btn.disabled = !!(s && s.loading) || !state.dash.invoice_count;
+  if (!s) {
+    box.innerHTML = `<div class="note">${IC.info}<span>${state.cfg.model_reachable
+      ? `${esc(state.cfg.model)} writes a short paragraph in Italian and English from the numbers above. Nothing is sent anywhere else.`
+      : `The model endpoint is offline, so the written summary is not available right now. The numbers above are computed in code and are always available. Start the model (for example <code>ollama serve</code>) and try again.`}</span></div>`;
+    return;
+  }
+  if (s.loading) { box.innerHTML = `<div class="note"><span class="spin"></span><span>${esc(state.cfg.model)} is writing the summary…</span></div>`; return; }
+  if (s.error) { box.innerHTML = `<div class="note">${IC.alert}<span>${esc(s.error)}</span></div>`; return; }
+  box.innerHTML = `<div class="narr"><div class="lang"><i>IT</i><p lang="it">${esc(s.it)}</p></div><div class="lang"><i>EN</i><p>${esc(s.en)}</p></div>
+    <div class="muted" style="font-size:12px">Written by ${esc(s.model)} from the computed numbers.</div></div>`;
+}
+
+$("sum-btn").onclick = async () => {
+  const m = state.month;
+  state.summary[m] = {loading: true}; renderNarr();
+  try { state.summary[m] = await api("/api/summary?month=" + m); }
+  catch (e) {
+    state.summary[m] = {error: e.status === 503
+      ? `${state.cfg.model} is not reachable, so no summary was written. Check LLM_BASE_URL and that the model is running.`
+      : `Could not write the summary: ${e.message}`};
+  }
+  if (m === state.month) renderNarr();
+};
+
+/* ---------- table ---------- */
+function nextDue(r) {
+  const ps = (r.invoice.payments || []).filter(p => p.due_date).map(p => p.due_date).sort();
+  return ps.find(d => d >= todayIso) || ps[ps.length - 1] || "";
+}
+const sorters = {
+  date: r => r.invoice.date, supplier: r => r.invoice.supplier.name.toLowerCase(), category: r => catLabel(r.category),
+  taxable: r => r.invoice.taxable, vat: r => r.invoice.tax, total: r => r.invoice.total, due: r => r.paid ? "9999" : (nextDue(r) || "9998"),
+};
+
+function filtered() {
+  const q = state.f.q.trim().toLowerCase();
+  let rows = state.invoices.filter(inScope);
+  const base = rows;
+  if (q) rows = rows.filter(r => [r.invoice.supplier.name, r.invoice.number, r.invoice.supplier.vat_number, r.filename, catLabel(r.category), ...r.invoice.lines.map(l => l.description)].join(" ").toLowerCase().includes(q));
+  if (state.f.cat) rows = rows.filter(r => r.category === state.f.cat);
+  if (state.f.attn) rows = rows.filter(r => r.anomalies.length);
+  if (state.f.unpaid) rows = rows.filter(r => !r.paid);
+  const {key, dir} = state.sort, get = sorters[key];
+  rows = rows.slice().sort((a, b) => { const x = get(a), y = get(b); return (x < y ? -1 : x > y ? 1 : b.id - a.id) * dir; });
+  return {rows, base};
+}
+
+function statusCell(r) {
+  if (r.paid) return `<span class="status st-good">Paid</span>`;
+  const due = nextDue(r);
+  if (!due) return `<span class="status muted">No due date</span>`;
+  const left = daysBetween(todayIso, due);
+  if (left < 0) return `<span class="status"><span class="st-bad">Overdue ${-left}d</span><span class="d">${esc(fmtDate(due))}</span></span>`;
+  return `<span class="status"><span class="${left <= 7 ? "st-warn" : ""}">${left === 0 ? "Today" : `In ${left} days`}</span><span class="d">${esc(fmtDate(due))}</span></span>`;
+}
+
+function rowHtml(r) {
+  const i = r.invoice, open = state.open.has(r.id), s = sourceKind(r);
+  const flags = r.anomalies.map(a => { const k = kind(a.kind); return `<span class="flag ${k.tone}" title="${esc(k.title)}: ${esc(a.message)}">${k.icon}</span>`; }).join("");
+  const opts = state.cfg.categories.map(c => `<option value="${esc(c)}" ${c === r.category ? "selected" : ""}>${esc(catLabel(c))}</option>`).join("");
+  const main = `<tr class="inv${open ? " open" : ""}" data-id="${r.id}">
+    <td class="c-exp"><button class="exp" type="button" aria-expanded="${open}" aria-controls="det-${r.id}" aria-label="Details for ${esc(i.supplier.name)} invoice ${esc(i.number)}">${IC.chev}</button></td>
+    <td class="c-date num" style="white-space:nowrap">${esc(fmtDate(i.date))}</td>
+    <td class="c-sup"><div class="sup"><b>${esc(i.supplier.name)}${flags ? `<span class="flags">${flags}</span>` : ""}</b><span>n. ${esc(i.number)} · ${esc(i.lines.map(l => l.description).join(", "))}</span></div></td>
+    <td class="c-cat"><span class="catsel" style="--cc:${catColor(r.category)}">${esc(catLabel(r.category))}<select data-cat="${r.id}" aria-label="Category for ${esc(i.supplier.name)} invoice ${esc(i.number)}">${opts}</select></span></td>
+    <td class="c-src"><span class="src ${s.cls}" title="${esc(s.tip)} ${esc(r.category_reason)}">${s.icon}${esc(s.label)}</span></td>
+    <td class="c-tax num">${eur(i.taxable)}</td><td class="c-vat num">${eur(i.tax)}</td><td class="c-total num"><b>${eur(i.total)}</b></td>
+    <td class="c-due">${statusCell(r)}</td>
+    <td class="c-paid"><span class="paidcell"><button class="switch" type="button" role="switch" aria-checked="${r.paid}" data-paid="${r.id}" aria-label="Paid: ${esc(i.supplier.name)} invoice ${esc(i.number)}"></button></span></td>
+  </tr>`;
+  return main + (open ? detailHtml(r) : "");
+}
+
+function detailHtml(r) {
+  const i = r.invoice, s = sourceKind(r);
+  const lines = i.lines.map(l => `<tr><td>${esc(l.description)}</td><td class="num muted">${(+l.vat_rate).toFixed(0)}%</td><td class="num">${eur(l.total)}</td></tr>`).join("");
+  const vat = i.vat_summary.map(v => `<tr><td>${(+v.rate).toFixed(0)}%</td><td class="num">${eur(v.taxable)}</td><td class="num">${eur(v.tax)}</td></tr>`).join("");
+  const pays = (i.payments || []).map(p => `<tr><td>${esc(fmtDate(p.due_date))}</td><td class="num">${eur(p.amount)}</td></tr>`).join("");
+  const origin = String(i.source || "").startsWith("pdf+") ? `PDF, fields extracted by ${esc(i.source.slice(4))}` : "FatturaPA XML, parsed in code";
+  const anoms = r.anomalies.map(a => { const k = kind(a.kind); return `<div class="anom ${k.tone}" style="margin-top:8px"><div class="ai">${k.icon}</div><div><b>${esc(k.title)}</b><div class="msg">${esc(a.message)}</div><div class="why">${esc(k.why)}</div></div></div>`; }).join("");
+  return `<tr class="details" id="det-${r.id}"><td colspan="10"><div class="dgrid">
+    <div class="dbox"><h3>Lines</h3><table class="mini"><thead><tr><th>Description</th><th class="num">VAT</th><th class="num">Amount</th></tr></thead><tbody>${lines || `<tr><td colspan="3" class="muted">No lines</td></tr>`}</tbody></table>
+      <div style="margin-top:12px"><h3>VAT summary</h3><table class="mini"><thead><tr><th>Rate</th><th class="num">Taxable</th><th class="num">VAT</th></tr></thead><tbody>${vat}</tbody></table></div></div>
+    <div class="dbox"><h3>Category</h3>
+      <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap"><span class="chip" style="--cc:${catColor(r.category)}">${esc(catLabel(r.category))}</span><span class="src ${s.cls}">${s.icon}${esc(s.label)}</span></div>
+      <p style="margin:8px 0 0;font-size:13px">“${esc(r.category_reason || "no reason given")}”</p>
+      <p class="muted" style="margin:4px 0 0;font-size:12.5px">${esc(s.tip)}</p>
+      ${anoms ? `<div style="margin-top:12px"><h3>Checks</h3>${anoms}</div>` : `<div style="margin-top:12px"><h3>Checks</h3><span class="st-good" style="font-size:12.5px">All checks passed</span></div>`}</div>
+    <div class="dbox"><h3>Document</h3><dl class="kv">
+      <dt>Number</dt><dd>${esc(i.number)}</dd><dt>Date</dt><dd>${esc(fmtDate(i.date))}</dd>
+      <dt>Supplier VAT</dt><dd class="num">${esc(i.supplier.vat_number || "–")}</dd><dt>Type</dt><dd>${esc(i.doc_type)}</dd>
+      <dt>Read from</dt><dd>${origin}</dd><dt>File</dt><dd>${esc(r.filename)}</dd><dt>Total</dt><dd><b>${eur(i.total)}</b></dd></dl>
+      ${pays ? `<div style="margin-top:12px"><h3>Payments</h3><table class="mini"><tbody>${pays}</tbody></table></div>` : ""}
+      ${state.cfg.uploads_enabled ? `<div class="dactions"><button class="btn sm danger" type="button" data-del="${r.id}">${IC.trash}Delete invoice</button></div>` : ""}</div>
+  </div></td></tr>`;
+}
+
+function renderTable() {
+  const {rows, base} = filtered();
+  $("ct-attn").textContent = base.filter(r => r.anomalies.length).length;
+  $("ct-unpaid").textContent = base.filter(r => !r.paid).length;
+  $("count").textContent = `Showing ${rows.length} of ${base.length}${state.f.scope === "month" ? ` in ${fmtMonth(state.month)}` : ""}`;
+  $("rows").innerHTML = rows.map(rowHtml).join("") || `<tr><td colspan="10" class="no-rows">No invoices match these filters.</td></tr>`;
+  document.querySelectorAll("th[data-sort]").forEach(th => {
+    const on = th.dataset.sort === state.sort.key;
+    if (on) th.setAttribute("aria-sort", state.sort.dir > 0 ? "ascending" : "descending"); else th.removeAttribute("aria-sort");
+    th.querySelector(".arrow").textContent = on ? (state.sort.dir > 0 ? "▲" : "▼") : "↕";
+  });
+}
+
+document.querySelectorAll("th[data-sort] button").forEach(b => b.onclick = () => {
+  const k = b.parentElement.dataset.sort;
+  state.sort = state.sort.key === k ? {key: k, dir: -state.sort.dir} : {key: k, dir: ["supplier", "category", "due"].includes(k) ? 1 : -1};
+  renderTable();
+});
+$("q").oninput = e => { state.f.q = e.target.value; renderTable(); };
+$("f-cat").onchange = e => { state.f.cat = e.target.value; renderTable(); };
+$("f-scope").onchange = e => { state.f.scope = e.target.value; renderTable(); };
+for (const [id, key] of [["f-attn", "attn"], ["f-unpaid", "unpaid"]]) $(id).onclick = () => { state.f[key] = !state.f[key]; $(id).setAttribute("aria-pressed", state.f[key]); renderTable(); };
+
+function toggleRow(id) { state.open.has(id) ? state.open.delete(id) : state.open.add(id); renderTable(); }
+
+$("rows").addEventListener("click", async e => {
+  const t = e.target;
+  const paid = t.closest("[data-paid]"), del = t.closest("[data-del]");
+  if (paid) {
+    const id = +paid.dataset.paid, now = paid.getAttribute("aria-checked") !== "true";
+    paid.setAttribute("aria-checked", now);
+    try { await api(`/api/invoices/${id}`, json("PATCH", {paid: now})); await refresh(); }
+    catch (err) { toast("err", "Could not update", err.message); refresh(); }
+    return;
+  }
+  if (del) {
+    const id = +del.dataset.del, r = state.invoices.find(x => x.id === id);
+    if (!confirm(`Delete ${r.invoice.supplier.name} invoice ${r.invoice.number}? This cannot be undone.`)) return;
+    try { await api(`/api/invoices/${id}`, {method: "DELETE"}); state.open.delete(id); toast("info", "Invoice deleted", `${r.invoice.supplier.name} · n. ${r.invoice.number}`); await loadConfig(); await refresh(); }
+    catch (err) { toast("err", "Could not delete", err.message); }
+    return;
+  }
+  if (t.closest("select, .catsel, a, .details")) return;
+  const tr = t.closest("tr.inv");
+  if (tr) toggleRow(+tr.dataset.id);
+});
+$("rows").addEventListener("change", async e => {
+  const t = e.target;
+  if (!t.dataset.cat) return;
+  const id = +t.dataset.cat;
   try {
-    const res = await api("/api/invoices", {method: "POST", body: fd});
-    $("status").textContent = `Added ${res.stored.length} invoice(s).` + res.errors.map(e => ` ${e.file}: ${e.error}.`).join("");
-  } catch (e) { $("status").textContent = "Upload failed: " + e.message; }
-  refresh();
+    await api(`/api/invoices/${id}`, json("PATCH", {category: t.value}));
+    toast("ok", `Category set to ${catLabel(t.value)}`, "Saved as a manual override.", 3500);
+    await refresh();
+  } catch (err) { toast("err", "Could not change category", err.message); refresh(); }
+});
+
+$("anoms").addEventListener("click", e => {
+  const b = e.target.closest("[data-goto]"); if (!b) return;
+  const id = +b.dataset.goto;
+  state.f = {...state.f, q: "", cat: "", attn: false, unpaid: false};
+  $("q").value = ""; $("f-cat").value = ""; $("f-attn").setAttribute("aria-pressed", false); $("f-unpaid").setAttribute("aria-pressed", false);
+  state.open.add(id); renderTable();
+  const row = document.querySelector(`tr.inv[data-id="${id}"]`);
+  if (row) { row.scrollIntoView({behavior: "smooth", block: "center"}); row.querySelector(".exp").focus({preventScroll: true}); }
+});
+
+/* ---------- month ---------- */
+$("month").onchange = e => setMonth(e.target.value);
+$("m-prev").onclick = () => setMonth(shiftMonth(state.month, -1));
+$("m-next").onclick = () => setMonth(shiftMonth(state.month, 1));
+
+/* ---------- upload ---------- */
+const ACCEPT = /\.(xml|p7m|pdf|zip)$/i;
+let busy = false;
+async function uploadFiles(fileList) {
+  if (!state.cfg.uploads_enabled || busy) return;
+  const files = [...fileList];
+  const bad = files.filter(f => !ACCEPT.test(f.name)), good = files.filter(f => ACCEPT.test(f.name));
+  for (const f of bad) toast("err", f.name, "Not an invoice file. Use .xml, .p7m, .pdf or .zip.");
+  if (!good.length) return;
+  busy = true;
+  const prog = $("progress"), fill = $("progress-fill"), text = $("progress-text");
+  prog.classList.add("show");
+  const tally = {stored: 0, skipped: 0, errors: 0}, newest = [];
+  for (let k = 0; k < good.length; k++) {
+    const f = good[k];
+    fill.style.width = `${(k / good.length * 100).toFixed(0)}%`;
+    text.textContent = `Reading ${k + 1} of ${good.length}: ${f.name}${state.cfg.model_reachable ? ` · ${state.cfg.model} is categorizing` : " · keyword rules (model offline)"}`;
+    const fd = new FormData(); fd.append("files", f);
+    try {
+      const res = await api("/api/invoices", {method: "POST", body: fd});
+      const st = res.stored || [], sk = res.skipped || [], er = res.errors || [];
+      tally.stored += st.length; tally.skipped += sk.length; tally.errors += er.length;
+      newest.push(...st);
+      if (st.length === 1) toast("ok", `${f.name}: stored`, `${st[0].invoice.supplier.name} · ${catLabel(st[0].category)} (${sourceKind(st[0]).label})`);
+      else if (st.length > 1) toast("ok", `${f.name}: ${st.length} invoices stored`, [...new Set(st.map(s => catLabel(s.category)))].join(", "));
+      if (sk.length) toast("dup", `${f.name}: ${sk.length === 1 ? "duplicate skipped" : `${sk.length} duplicates skipped`}`, sk.length === 1 ? `${sk[0].supplier} n. ${sk[0].number} was already imported.` : "Already imported earlier.");
+      for (const x of er) toast("err", `${x.file}: not imported`, x.error, 10000);
+      if (!st.length && !sk.length && !er.length) toast("info", `${f.name}: nothing to import`, "No invoices found (SDI receipts are skipped).");
+    } catch (err) { tally.errors++; toast("err", `${f.name}: upload failed`, err.message, 10000); }
+  }
+  fill.style.width = "100%";
+  text.textContent = `Done: ${tally.stored} stored, ${tally.skipped} duplicate${tally.skipped === 1 ? "" : "s"} skipped, ${tally.errors} error${tally.errors === 1 ? "" : "s"}.`;
+  setTimeout(() => prog.classList.remove("show"), 4000);
+  busy = false;
+  $("file").value = "";
+  if (newest.length && !newest.some(r => r.invoice.date.startsWith(state.month))) {
+    state.month = newest.map(r => r.invoice.date.slice(0, 7)).sort().pop();
+  }
+  await loadConfig();
+  await refresh();
 }
 
 const drop = $("drop");
-drop.onclick = () => $("file").click();
-$("file").onchange = e => upload(e.target.files);
-drop.ondragover = e => { e.preventDefault(); drop.classList.add("over"); };
-drop.ondragleave = () => drop.classList.remove("over");
-drop.ondrop = e => { e.preventDefault(); drop.classList.remove("over"); upload(e.dataTransfer.files); };
-month.onchange = refresh;
+$("file").onchange = e => uploadFiles(e.target.files);
+$("choose").onkeydown = e => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); $("file").click(); } };
+drop.addEventListener("dragover", e => { e.preventDefault(); if (state.cfg.uploads_enabled) drop.classList.add("over"); });
+drop.addEventListener("dragleave", e => { if (!drop.contains(e.relatedTarget)) drop.classList.remove("over"); });
+drop.addEventListener("drop", e => { e.preventDefault(); drop.classList.remove("over"); uploadFiles(e.dataTransfer.files); });
+// Dropping anywhere on the page imports too, instead of the browser opening the file.
+window.addEventListener("dragover", e => e.preventDefault());
+window.addEventListener("drop", e => { e.preventDefault(); if (!drop.contains(e.target)) uploadFiles(e.dataTransfer.files); });
 
-document.addEventListener("change", async e => {
-  const t = e.target;
-  if (t.dataset.paid) await api(`/api/invoices/${t.dataset.paid}/paid`, {method: "POST", headers: {"Content-Type": "application/json"}, body: JSON.stringify({paid: t.checked})});
-  if (t.dataset.cat) await api(`/api/invoices/${t.dataset.cat}/category`, {method: "POST", headers: {"Content-Type": "application/json"}, body: JSON.stringify({category: t.value})});
-  if (t.dataset.paid || t.dataset.cat) refresh();
-});
-
-$("sum-btn").onclick = async () => {
-  $("summary").textContent = "Writing…";
+$("samples").onclick = async () => {
+  const b = $("samples"); b.disabled = true;
   try {
-    const s = await api("/api/summary?month=" + month.value);
-    $("summary").innerHTML = `<p>🇮🇹 ${esc(s.it)}</p><p>🇬🇧 ${esc(s.en)}</p><p class="muted" style="font-size:12px">Written by ${esc(s.model)}</p>`;
-  } catch (e) { $("summary").textContent = e.message; }
+    const res = await api("/api/demo/load-samples", {method: "POST"});
+    toast("ok", `Loaded ${res.loaded} sample invoices`, "Fake suppliers, real FatturaPA structure. Some are flagged on purpose.");
+    const months = (await api("/api/invoices")).map(r => r.invoice.date.slice(0, 7)).sort();
+    if (months.length) state.month = months[months.length - 1];
+    await loadConfig(); await refresh();
+  } catch (err) { toast("err", "Could not load samples", err.message); }
+  b.disabled = false;
 };
 
-$("demo").onclick = async () => { await api("/api/demo/load-samples", {method: "POST"}); month.value = "2026-10"; refresh(); };
-api("/api/config").then(c => { $("demo").hidden = !c.demo; }).catch(() => {});
-refresh();
+(async () => {
+  await loadConfig();
+  try { await refresh(); } catch (e) { toast("err", "Could not load invoices", e.message, 0); }
+  setInterval(loadConfig, 30000);
+})();
 </script>
 </body>
 </html>

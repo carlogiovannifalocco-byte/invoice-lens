@@ -13,10 +13,29 @@ Every Italian freelancer receives dozens of *fatture elettroniche* a month as Fa
 - **Reads PDF invoices** by extracting the text and asking the model to fill a fixed JSON schema (it is told never to invent values).
 - **Categorizes every expense** (software, travel, professional services...) with an open-weight model, with a one-line reason you can see and override.
 - **Flags anomalies** with plain arithmetic, not the model: duplicate invoices, VAT that does not match the rate, totals that do not add up, overdue payments.
-- **Dashboard**: monthly spend by category, deductible VAT, payments due in the next 30 days.
-- **Monthly summary** written by the model in Italian and English, from the computed numbers only.
+- **Dashboard**: monthly spend by category, deductible VAT, payments due in the next 30 days, and a "needs attention" panel that explains each flag and why it matters.
+- **Review in place**: search, filter (category, needs attention, unpaid) and sort the invoice table; expand a row to see its lines, VAT summary, payments and the model's one-line reason; change a category inline (saved as `manual`) and mark invoices paid.
+- **Honest model status**: a header badge shows whether the model endpoint answers or the app is running on the keyword fallback, and every category says where it came from (the model's name, `rules` or `manual`).
+- **Monthly summary** written by the model in Italian and English, from the computed numbers only. The key numbers are shown even when the model is offline.
 - **Calendar reminders**: export unpaid due dates as an `.ics` file with a reminder two days before.
 - **CSV export** that opens directly in Italian-locale spreadsheets (`;` separator, decimal comma).
+
+## The interface
+
+One page, no build step, no external scripts. Drag files anywhere on the page; each file gets its own result (stored, duplicate skipped, or the reason it failed). Light and dark themes follow the system setting (or the toggle in the header), and the layout works down to phone width.
+
+![InvoiceLens dashboard with the sample invoices](docs/screenshot.png)
+
+<details>
+<summary>Dark mode and phone layout</summary>
+
+![Dark mode](docs/screenshot-dark.png)
+
+![Phone layout](docs/screenshot-mobile.png)
+
+</details>
+
+These screenshots were taken with the model endpoint switched off, so every category is labelled `rules` (the keyword fallback). With Gemma running, the same column shows the model's name and its reason.
 
 ## Why local and open
 
@@ -36,7 +55,7 @@ docker compose exec ollama ollama pull gemma3:4b
 open http://localhost:8000
 ```
 
-Drop the files from [`samples/`](samples) (fake invoices) or your own.
+Click **Try with sample invoices** (it appears while InvoiceLens is empty) to load the ten fake invoices in [`samples/`](samples), or drop your own files.
 
 ### Without Docker
 
@@ -55,7 +74,7 @@ uvicorn app.main:app --reload
 | `LLM_API_KEY` | `ollama` | Key for hosted endpoints |
 | `INVOICELENS_DB` | `invoicelens.db` | SQLite file |
 | `SENTRY_DSN` | unset | When set, every model call is traced as a Sentry `gen_ai.chat` span (model, task, token usage) |
-| `INVOICELENS_DEMO` | unset | `1` = public demo: loads the sample invoices, disables uploads |
+| `INVOICELENS_DEMO` | unset | `1` = public demo: loads the sample invoices, disables uploads and deletes |
 
 If the model endpoint is not reachable, invoices are still parsed and checked; categories fall back to a keyword list and are labelled `rules` in the UI.
 
@@ -76,6 +95,20 @@ flowchart LR
   S -. spans .-> Sentry
 ```
 
+## API
+
+| Method | Path | What it does |
+|---|---|---|
+| `POST` | `/api/invoices` | Upload files (`files` form field). Returns `stored`, `skipped` (already imported) and `errors` |
+| `GET` | `/api/invoices` | All invoices with their anomalies |
+| `PATCH` | `/api/invoices/{id}` | `{"category": "...", "paid": true}`, either or both; a category set here is stored with source `manual` |
+| `DELETE` | `/api/invoices/{id}` | Remove one invoice (not in the public demo) |
+| `GET` | `/api/dashboard?month=YYYY-MM` | Month totals, spend by category, upcoming payments, anomalies |
+| `GET` | `/api/summary?month=YYYY-MM` | Model-written summary in Italian and English (503 if the model is offline) |
+| `GET` | `/api/config` | Model name, whether its endpoint answers (cached `GET /models`), demo flags |
+| `GET` | `/api/export.csv`, `/api/deadlines.ics` | Exports |
+| `POST` | `/api/demo/load-samples` | Load the sample invoices: always in the demo, only into an empty store otherwise |
+
 ## Deploy the public demo on Render
 
 `render.yaml` deploys a demo with the sample invoices only (uploads are disabled so nobody uploads real data to a shared server). Point `LLM_BASE_URL`/`LLM_API_KEY` at an OpenAI-compatible endpoint serving Gemma, for example Google AI Studio's OpenAI-compatible API with `gemma-3-27b-it`.
@@ -87,7 +120,7 @@ pip install -r requirements-dev.txt
 pytest
 ```
 
-The tests cover the XML parser, signed `.p7m` extraction (they sign a sample with a throwaway certificate), entity-expansion protection, anomaly rules, the model request format, and the HTTP API.
+The tests cover the XML parser, signed `.p7m` extraction (they sign a sample with a throwaway certificate), entity-expansion protection, anomaly rules, the model request format, and the HTTP API (uploads and duplicate reporting, ZIP import, category overrides, paid status, deletes, the status check and sample loading).
 
 ## Limits
 

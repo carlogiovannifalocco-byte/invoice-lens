@@ -70,6 +70,22 @@ def all_invoices() -> list[dict]:
         return [_row(r) for r in conn.execute("SELECT * FROM invoices ORDER BY id")]
 
 
+def get(invoice_id: int) -> dict | None:
+    with connect() as conn:
+        row = conn.execute("SELECT * FROM invoices WHERE id = ?", (invoice_id,)).fetchone()
+        return _row(row) if row else None
+
+
+def count() -> int:
+    with connect() as conn:
+        return conn.execute("SELECT COUNT(*) FROM invoices").fetchone()[0]
+
+
+def delete(invoice_id: int) -> bool:
+    with connect() as conn:
+        return conn.execute("DELETE FROM invoices WHERE id = ?", (invoice_id,)).rowcount == 1
+
+
 def set_paid(invoice_id: int, paid: bool) -> bool:
     with connect() as conn:
         cur = conn.execute("UPDATE invoices SET paid = ? WHERE id = ?", (int(paid), invoice_id))
@@ -79,7 +95,7 @@ def set_paid(invoice_id: int, paid: bool) -> bool:
 def set_category(invoice_id: int, category: str) -> bool:
     with connect() as conn:
         cur = conn.execute(
-            "UPDATE invoices SET category = ?, category_source = 'user', category_reason = 'set by user' "
+            "UPDATE invoices SET category = ?, category_source = 'manual', category_reason = 'set by you' "
             "WHERE id = ?",
             (category, invoice_id),
         )

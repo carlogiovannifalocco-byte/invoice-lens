@@ -47,28 +47,41 @@ def _demo() -> bool:
     return os.getenv("INVOICELENS_DEMO") == "1"
 
 
+def _can_load_samples() -> bool:
+    # The demo always can (it resets to the samples); a local install only while it is empty,
+    # so fake invoices are never mixed into someone's real books.
+    return _demo() or store.count() == 0
+
+
 @app.get("/api/config")
 def config():
-    return {"demo": _demo(), "model": llm.model_name()}
+    return {
+        "demo": _demo(),
+        "model": llm.model_name(),
+        "model_reachable": llm.endpoint_reachable(),
+        "uploads_enabled": not _demo(),
+        "can_load_samples": _can_load_samples(),
+        "categories": llm.CATEGORIES,
+    }
 
 
 @app.post("/api/invoices")
 async def upload(files: list[UploadFile]):
     if _demo():
         raise HTTPException(403, "The public demo only shows the sample invoices. Run InvoiceLens locally for your own files.")
-    results, errors = [], []
+    results, errors, skipped = [], [], []
     for f in files:
         data = await f.read(MAX_UPLOAD + 1)
         if len(data) > MAX_UPLOAD:
             errors.append({"file": f.filename, "error": "file larger than 50 MB"})
             continue
         try:
-            stored, failed = ingest_upload(f.filename or "upload", data)
+            stored, failed = ingest_upload(f.filename or "upload", data, skipped)
             results.extend(stored)
             errors.extend(failed)
         except (InvoiceParseError, llm.LLMUnavailable) as exc:
             errors.append({"file": f.filename, "error": str(exc)})
-    return {"stored": results, "errors": errors}
+    return {"stored": results, "errors": errors, "skipped": skipped}
 
 
 @app.get("/api/invoices")
@@ -77,6 +90,45 @@ def list_invoices():
     for r in records:
         r["anomalies"] = anomalies(r, records)
     return records
+
+
+class InvoicePatch(BaseModel):
+    category: str | None = None
+    paid: bool | None = None
+
+
+def _with_anomalies(invoice_id: int) -> dict:
+    records = store.all_invoices()
+    record = next((r for r in records if r["id"] == invoice_id), None)
+    if record is None:
+        raise HTTPException(404, "invoice not found")
+    record["anomalies"] = anomalies(record, records)
+    return record
+
+
+@app.patch("/api/invoices/{invoice_id}")
+def patch_invoice(invoice_id: int, body: InvoicePatch):
+    """Override the category (stored with source "manual") and/or mark the invoice paid."""
+    if body.category is None and body.paid is None:
+        raise HTTPException(400, "nothing to change: send category and/or paid")
+    if body.category is not None and body.category not in llm.CATEGORIES:
+        raise HTTPException(400, f"category must be one of {llm.CATEGORIES}")
+    if store.get(invoice_id) is None:
+        raise HTTPException(404, "invoice not found")
+    if body.category is not None:
+        store.set_category(invoice_id, body.category)
+    if body.paid is not None:
+        store.set_paid(invoice_id, body.paid)
+    return _with_anomalies(invoice_id)
+
+
+@app.delete("/api/invoices/{invoice_id}")
+def delete_invoice(invoice_id: int):
+    if _demo():
+        raise HTTPException(403, "the public demo is read-only")
+    if not store.delete(invoice_id):
+        raise HTTPException(404, "invoice not found")
+    return {"ok": True}
 
 
 class PaidBody(BaseModel):
@@ -186,10 +238,12 @@ def deadlines_ics():
 
 @app.post("/api/demo/load-samples")
 def load_samples():
-    """Load the bundled fake invoices. Disabled unless INVOICELENS_DEMO=1 (used by the public demo)."""
-    if not _demo():
-        raise HTTPException(403, "demo mode is off")
-    store.clear()
+    """Load the bundled fake invoices. In the public demo (INVOICELENS_DEMO=1) this resets the store;
+    a local install allows it only while it has no invoices yet."""
+    if not _can_load_samples():
+        raise HTTPException(403, "sample invoices can only be loaded into an empty InvoiceLens")
+    if _demo():
+        store.clear()
     loaded = []
     for path in sorted((ROOT / "samples").glob("*.xml")):
         loaded.extend(ingest(path.name, path.read_bytes()))

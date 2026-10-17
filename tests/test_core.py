@@ -193,3 +193,73 @@ def test_deadlines_calendar_excludes_paid(tmp_path, monkeypatch):
     assert "DTSTART;VALUE=DATE:20261031" in body
     assert "Studio Bianchi" not in body
     assert "Nuvola Hosting S.r.l. 307.44 EUR" in body
+
+
+def test_patch_overrides_category_and_paid(tmp_path, monkeypatch):
+    client = _client(tmp_path, monkeypatch)
+    client.post("/api/invoices", files=[("files", ("a.xml", sample("05"), "text/xml"))])
+    (rec,) = client.get("/api/invoices").json()
+    assert rec["category_source"] == "rules"
+    res = client.patch(f"/api/invoices/{rec['id']}", json={"category": "office"})
+    assert res.status_code == 200
+    body = res.json()
+    assert body["category"] == "office" and body["category_source"] == "manual"
+    assert body["paid"] is False
+    assert any(a["kind"] == "overdue" for a in body["anomalies"])
+    paid = client.patch(f"/api/invoices/{rec['id']}", json={"paid": True}).json()
+    assert paid["paid"] is True and paid["category"] == "office"
+    assert not any(a["kind"] == "overdue" for a in paid["anomalies"])
+    assert client.patch(f"/api/invoices/{rec['id']}", json={"category": "pizza"}).status_code == 400
+    assert client.patch(f"/api/invoices/{rec['id']}", json={}).status_code == 400
+    assert client.patch("/api/invoices/999", json={"paid": True}).status_code == 404
+
+
+def test_upload_reports_skipped_duplicates(tmp_path, monkeypatch):
+    client = _client(tmp_path, monkeypatch)
+    files = [("files", ("a.xml", sample("01"), "text/xml"))]
+    assert client.post("/api/invoices", files=files).json()["skipped"] == []
+    again = client.post("/api/invoices", files=files).json()
+    assert again["stored"] == [] and again["errors"] == []
+    assert again["skipped"] == [
+        {"file": "a.xml", "number": "2026/0412", "supplier": "Nuvola Hosting S.r.l.", "reason": "already imported"}
+    ]
+
+
+def test_delete_invoice_and_demo_is_read_only(tmp_path, monkeypatch):
+    client = _client(tmp_path, monkeypatch)
+    client.post("/api/invoices", files=[("files", ("a.xml", sample("01"), "text/xml"))])
+    (rec,) = client.get("/api/invoices").json()
+    assert client.delete(f"/api/invoices/{rec['id']}").json() == {"ok": True}
+    assert client.get("/api/invoices").json() == []
+    assert client.delete(f"/api/invoices/{rec['id']}").status_code == 404
+    monkeypatch.setenv("INVOICELENS_DEMO", "1")
+    assert client.delete("/api/invoices/1").status_code == 403
+
+
+def test_config_reports_model_status_and_samples(tmp_path, monkeypatch):
+    client = _client(tmp_path, monkeypatch)
+    llm._status_cache.clear()
+    cfg = client.get("/api/config").json()
+    assert cfg["model"] == llm.model_name()
+    assert cfg["model_reachable"] is False
+    assert cfg["uploads_enabled"] is True and cfg["can_load_samples"] is True
+    assert "software" in cfg["categories"]
+
+    class _Ok:
+        status_code = 200
+
+    llm._status_cache.clear()
+    monkeypatch.setattr(llm.httpx, "get", lambda *a, **k: _Ok())
+    assert client.get("/api/config").json()["model_reachable"] is True
+    llm._status_cache.clear()
+
+
+def test_samples_load_only_into_empty_local_store(tmp_path, monkeypatch):
+    client = _client(tmp_path, monkeypatch)
+    res = client.post("/api/demo/load-samples")
+    assert res.status_code == 200 and res.json()["loaded"] == 10
+    assert client.get("/api/config").json()["can_load_samples"] is False
+    assert client.post("/api/demo/load-samples").status_code == 403
+    monkeypatch.setenv("INVOICELENS_DEMO", "1")
+    assert client.post("/api/demo/load-samples").json()["loaded"] == 10
+    assert len(client.get("/api/invoices").json()) == 10

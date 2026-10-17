@@ -36,7 +36,9 @@ def _pdf_invoice(data: bytes) -> dict:
     }
 
 
-def ingest(filename: str, data: bytes) -> list[dict]:
+def ingest(filename: str, data: bytes, skipped: list[dict] | None = None) -> list[dict]:
+    """Parse, categorize and store. Invoices already imported are not stored again; when `skipped`
+    is given, each one is reported there so the UI can say "duplicate skipped"."""
     if filename.lower().endswith(".pdf"):
         invoices = [_pdf_invoice(data)]
     else:
@@ -45,6 +47,9 @@ def ingest(filename: str, data: bytes) -> list[dict]:
     stored = []
     for inv in invoices:
         if _already_imported(inv):
+            if skipped is not None:
+                skipped.append({"file": filename, "number": inv["number"],
+                                "supplier": inv["supplier"]["name"], "reason": "already imported"})
             continue
         try:
             category = llm.categorize(inv)
@@ -69,11 +74,13 @@ MAX_MEMBER_SIZE = 5 * 1024 * 1024
 MAX_ZIP_TOTAL = 100 * 1024 * 1024
 
 
-def ingest_upload(filename: str, data: bytes) -> tuple[list[dict], list[dict]]:
+def ingest_upload(
+    filename: str, data: bytes, skipped: list[dict] | None = None
+) -> tuple[list[dict], list[dict]]:
     """Ingest one uploaded file. A .zip (like the bulk download from the Agenzia delle Entrate portal)
     is unpacked and each invoice inside is ingested; SDI receipts and other non-invoices are skipped."""
     if not filename.lower().endswith(".zip"):
-        return ingest(filename, data), []
+        return ingest(filename, data, skipped), []
     stored, errors = [], []
     try:
         archive = zipfile.ZipFile(io.BytesIO(data))
@@ -94,7 +101,7 @@ def ingest_upload(filename: str, data: bytes) -> tuple[list[dict], list[dict]]:
         if "_MT_" in name or "_RC_" in name or "_NS_" in name:
             continue  # SDI metadata and delivery receipts, not invoices
         try:
-            stored.extend(ingest(name, archive.read(m)))
+            stored.extend(ingest(name, archive.read(m), skipped))
         except (InvoiceParseError, llm.LLMUnavailable) as exc:
             errors.append({"file": name, "error": str(exc)})
     return stored, errors
