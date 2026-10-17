@@ -125,7 +125,7 @@ def export_csv():
     buf = io.StringIO()
     writer = csv.writer(buf, delimiter=";")
     writer.writerow(
-        ["id", "data", "numero", "fornitore", "partita_iva", "categoria", "imponibile", "iva", "totale", "pagata"]
+        ["id", "date", "number", "supplier", "vat_number", "category", "taxable", "vat", "total", "paid"]
     )
     for r in store.all_invoices():
         inv = r["invoice"]
@@ -140,7 +140,7 @@ def export_csv():
                 f"{inv['taxable']:.2f}".replace(".", ","),
                 f"{inv['tax']:.2f}".replace(".", ","),
                 f"{inv['total']:.2f}".replace(".", ","),
-                "si" if r["paid"] else "no",
+                "yes" if r["paid"] else "no",
             ]
         )
     buf.seek(0)

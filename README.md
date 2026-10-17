@@ -14,7 +14,7 @@ Every Italian freelancer receives dozens of *fatture elettroniche* a month as Fa
 - **Flags anomalies** with plain arithmetic, not the model: duplicate invoices, VAT that does not match the rate, totals that do not add up, overdue payments.
 - **Dashboard**: monthly spend by category, deductible VAT, payments due in the next 30 days.
 - **Monthly summary** written by the model in Italian and English, from the computed numbers only.
-- **CSV export** in the format Italian spreadsheets expect (`;` separator, decimal comma).
+- **CSV export** that opens directly in Italian-locale spreadsheets (`;` separator, decimal comma).
 
 ## Why local and open
 
