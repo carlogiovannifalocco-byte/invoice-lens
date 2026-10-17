@@ -22,7 +22,7 @@ CREATE TABLE IF NOT EXISTS invoices (
 
 
 def db_path() -> str:
-    return os.getenv("FATTURALENS_DB", "fatturalens.db")
+    return os.getenv("INVOICELENS_DB", "invoicelens.db")
 
 
 @contextmanager

@@ -5,6 +5,6 @@ COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 COPY app app
 COPY samples samples
-ENV FATTURALENS_DB=/tmp/fatturalens.db
+ENV INVOICELENS_DB=/tmp/invoicelens.db
 EXPOSE 8000
 CMD ["sh", "-c", "uvicorn app.main:app --host 0.0.0.0 --port ${PORT:-8000}"]

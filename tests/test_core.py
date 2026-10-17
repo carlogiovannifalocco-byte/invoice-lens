@@ -98,7 +98,7 @@ def test_rules_fallback_categorizes():
 
 
 def test_api_upload_and_export(tmp_path, monkeypatch):
-    monkeypatch.setenv("FATTURALENS_DB", str(tmp_path / "t.db"))
+    monkeypatch.setenv("INVOICELENS_DB", str(tmp_path / "t.db"))
     monkeypatch.setenv("LLM_BASE_URL", "http://127.0.0.1:9")  # unreachable: forces rules fallback
     from app.main import app
 

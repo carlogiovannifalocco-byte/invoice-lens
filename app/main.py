@@ -1,4 +1,4 @@
-"""FatturaLens HTTP API and web UI."""
+"""InvoiceLens HTTP API and web UI."""
 
 from __future__ import annotations
 
@@ -25,7 +25,7 @@ if os.getenv("SENTRY_DSN"):
 ROOT = Path(__file__).resolve().parent.parent
 MAX_UPLOAD = 5 * 1024 * 1024
 
-app = FastAPI(title="FatturaLens")
+app = FastAPI(title="InvoiceLens")
 
 
 @app.get("/")
@@ -44,7 +44,7 @@ def health():
 
 
 def _demo() -> bool:
-    return os.getenv("FATTURALENS_DEMO") == "1"
+    return os.getenv("INVOICELENS_DEMO") == "1"
 
 
 @app.get("/api/config")
@@ -55,7 +55,7 @@ def config():
 @app.post("/api/invoices")
 async def upload(files: list[UploadFile]):
     if _demo():
-        raise HTTPException(403, "The public demo only shows the sample invoices. Run FatturaLens locally for your own files.")
+        raise HTTPException(403, "The public demo only shows the sample invoices. Run InvoiceLens locally for your own files.")
     results, errors = [], []
     for f in files:
         data = await f.read(MAX_UPLOAD + 1)
@@ -147,13 +147,13 @@ def export_csv():
     return StreamingResponse(
         iter([buf.getvalue()]),
         media_type="text/csv",
-        headers={"Content-Disposition": "attachment; filename=fatturalens.csv"},
+        headers={"Content-Disposition": "attachment; filename=invoicelens.csv"},
     )
 
 
 @app.post("/api/demo/load-samples")
 def load_samples():
-    """Load the bundled fake invoices. Disabled unless FATTURALENS_DEMO=1 (used by the public demo)."""
+    """Load the bundled fake invoices. Disabled unless INVOICELENS_DEMO=1 (used by the public demo)."""
     if not _demo():
         raise HTTPException(403, "demo mode is off")
     store.clear()

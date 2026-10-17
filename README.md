@@ -1,10 +1,10 @@
-# FatturaLens
+# InvoiceLens
 
 **Your Italian e-invoices, sorted by an open model that never leaves your machine.**
 
-Every Italian freelancer receives dozens of *fatture elettroniche* a month as FatturaPA XML (often wrapped in signed `.p7m` files) plus the odd PDF. FatturaLens reads them, categorizes each expense with **Gemma running locally**, flags what needs a second look, and gives you a monthly picture you can hand to your accountant.
+Every Italian freelancer receives dozens of *fatture elettroniche* a month as FatturaPA XML (often wrapped in signed `.p7m` files) plus the odd PDF. InvoiceLens reads them, categorizes each expense with **Gemma running locally**, flags what needs a second look, and gives you a monthly picture you can hand to your accountant.
 
-![FatturaLens dashboard](docs/screenshot.png)
+![InvoiceLens dashboard](docs/screenshot.png)
 
 ## What it does
 
@@ -51,9 +51,9 @@ uvicorn app.main:app --reload
 | `LLM_BASE_URL` | `http://localhost:11434/v1` | Any OpenAI-compatible endpoint (Ollama, llama.cpp server, vLLM, a hosted Gemma) |
 | `LLM_MODEL` | `gemma3:4b` | Model name at that endpoint |
 | `LLM_API_KEY` | `ollama` | Key for hosted endpoints |
-| `FATTURALENS_DB` | `fatturalens.db` | SQLite file |
+| `INVOICELENS_DB` | `invoicelens.db` | SQLite file |
 | `SENTRY_DSN` | unset | When set, every model call is traced as a Sentry `gen_ai.chat` span (model, task, token usage) |
-| `FATTURALENS_DEMO` | unset | `1` = public demo: loads the sample invoices, disables uploads |
+| `INVOICELENS_DEMO` | unset | `1` = public demo: loads the sample invoices, disables uploads |
 
 If the model endpoint is not reachable, invoices are still parsed and checked; categories fall back to a keyword list and are labelled `rules` in the UI.
 

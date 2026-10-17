@@ -85,7 +85,7 @@ def _span(model: str, task: str):
         span.set_data("gen_ai.system", "openai_compatible")
         span.set_data("gen_ai.operation.name", "chat")
         span.set_data("gen_ai.request.model", model)
-        span.set_data("fatturalens.task", task)
+        span.set_data("invoicelens.task", task)
         yield span
 
 

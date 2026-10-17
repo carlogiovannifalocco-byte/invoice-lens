@@ -1,12 +1,12 @@
 # Public demo on Render: sample invoices only, uploads disabled.
 services:
   - type: web
-    name: fatturalens-demo
+    name: invoicelens-demo
     runtime: docker
     plan: free
     healthCheckPath: /api/config
     envVars:
-      - key: FATTURALENS_DEMO
+      - key: INVOICELENS_DEMO
         value: "1"
       - key: LLM_BASE_URL
         sync: false   # an OpenAI-compatible endpoint serving Gemma

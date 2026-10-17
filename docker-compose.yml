@@ -1,4 +1,4 @@
-# Fully local: FatturaLens + Gemma on Ollama. Nothing leaves your machine.
+# Fully local: InvoiceLens + Gemma on Ollama. Nothing leaves your machine.
 services:
   ollama:
     image: ollama/ollama
@@ -9,7 +9,7 @@ services:
     environment:
       LLM_BASE_URL: http://ollama:11434/v1
       LLM_MODEL: gemma3:4b
-      FATTURALENS_DB: /data/fatturalens.db
+      INVOICELENS_DB: /data/invoicelens.db
     volumes: [data:/data]
     depends_on: [ollama]
 volumes:
