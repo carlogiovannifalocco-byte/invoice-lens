@@ -1,0 +1,58 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<p:FatturaElettronica versione="FPR12" xmlns:p="http://ivaservizi.agenziaentrate.gov.it/docs/xsd/fatture/v1.2">
+  <FatturaElettronicaHeader>
+    <DatiTrasmissione>
+      <IdTrasmittente><IdPaese>IT</IdPaese><IdCodice>10000000004</IdCodice></IdTrasmittente>
+      <ProgressivoInvio>09981</ProgressivoInvio>
+      <FormatoTrasmissione>FPR12</FormatoTrasmissione>
+      <CodiceDestinatario>0000000</CodiceDestinatario>
+    </DatiTrasmissione>
+    <CedentePrestatore>
+      <DatiAnagrafici>
+        <IdFiscaleIVA><IdPaese>IT</IdPaese><IdCodice>10000000004</IdCodice></IdFiscaleIVA>
+        <Anagrafica><Denominazione>FibraVeloce S.p.A.</Denominazione></Anagrafica>
+        <RegimeFiscale>RF01</RegimeFiscale>
+      </DatiAnagrafici>
+    </CedentePrestatore>
+    <CessionarioCommittente>
+      <DatiAnagrafici>
+        <IdFiscaleIVA><IdPaese>IT</IdPaese><IdCodice>01234567890</IdCodice></IdFiscaleIVA>
+        <Anagrafica><Nome>Giulia</Nome><Cognome>Rossi</Cognome></Anagrafica>
+      </DatiAnagrafici>
+    </CessionarioCommittente>
+  </FatturaElettronicaHeader>
+  <FatturaElettronicaBody>
+    <DatiGenerali>
+      <DatiGeneraliDocumento>
+        <TipoDocumento>TD01</TipoDocumento>
+        <Divisa>EUR</Divisa>
+        <Data>2026-10-06</Data>
+        <Numero>FV2026-09981</Numero>
+        <ImportoTotaleDocumento>30.00</ImportoTotaleDocumento>
+      </DatiGeneraliDocumento>
+    </DatiGenerali>
+    <DatiBeniServizi>
+      <DettaglioLinee>
+        <NumeroLinea>1</NumeroLinea>
+        <Descrizione>Canone fibra ufficio ottobre</Descrizione>
+        <Quantita>1.00</Quantita>
+        <PrezzoUnitario>24.59</PrezzoUnitario>
+        <PrezzoTotale>24.59</PrezzoTotale>
+        <AliquotaIVA>22.00</AliquotaIVA>
+      </DettaglioLinee>
+      <DatiRiepilogo>
+        <AliquotaIVA>22.00</AliquotaIVA>
+        <ImponibileImporto>24.59</ImponibileImporto>
+        <Imposta>5.41</Imposta>
+      </DatiRiepilogo>
+    </DatiBeniServizi>
+    <DatiPagamento>
+      <CondizioniPagamento>TP02</CondizioniPagamento>
+      <DettaglioPagamento>
+        <ModalitaPagamento>MP05</ModalitaPagamento>
+        <DataScadenzaPagamento>2026-10-20</DataScadenzaPagamento>
+        <ImportoPagamento>30.00</ImportoPagamento>
+      </DettaglioPagamento>
+    </DatiPagamento>
+  </FatturaElettronicaBody>
+</p:FatturaElettronica>

@@ -1,0 +1,7 @@
+fastapi==0.143.3
+uvicorn==0.53.0
+python-multipart==0.0.32
+httpx==0.28.1
+pypdf==6.17.0
+defusedxml==0.7.1
+sentry-sdk==2.72.0

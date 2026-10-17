@@ -1,0 +1,66 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<p:FatturaElettronica versione="FPR12" xmlns:p="http://ivaservizi.agenziaentrate.gov.it/docs/xsd/fatture/v1.2">
+  <FatturaElettronicaHeader>
+    <DatiTrasmissione>
+      <IdTrasmittente><IdPaese>IT</IdPaese><IdCodice>10000000001</IdCodice></IdTrasmittente>
+      <ProgressivoInvio>60412</ProgressivoInvio>
+      <FormatoTrasmissione>FPR12</FormatoTrasmissione>
+      <CodiceDestinatario>0000000</CodiceDestinatario>
+    </DatiTrasmissione>
+    <CedentePrestatore>
+      <DatiAnagrafici>
+        <IdFiscaleIVA><IdPaese>IT</IdPaese><IdCodice>10000000001</IdCodice></IdFiscaleIVA>
+        <Anagrafica><Denominazione>Nuvola Hosting S.r.l.</Denominazione></Anagrafica>
+        <RegimeFiscale>RF01</RegimeFiscale>
+      </DatiAnagrafici>
+    </CedentePrestatore>
+    <CessionarioCommittente>
+      <DatiAnagrafici>
+        <IdFiscaleIVA><IdPaese>IT</IdPaese><IdCodice>01234567890</IdCodice></IdFiscaleIVA>
+        <Anagrafica><Nome>Giulia</Nome><Cognome>Rossi</Cognome></Anagrafica>
+      </DatiAnagrafici>
+    </CessionarioCommittente>
+  </FatturaElettronicaHeader>
+  <FatturaElettronicaBody>
+    <DatiGenerali>
+      <DatiGeneraliDocumento>
+        <TipoDocumento>TD01</TipoDocumento>
+        <Divisa>EUR</Divisa>
+        <Data>2026-10-12</Data>
+        <Numero>2026/0412</Numero>
+        <ImportoTotaleDocumento>307.44</ImportoTotaleDocumento>
+      </DatiGeneraliDocumento>
+    </DatiGenerali>
+    <DatiBeniServizi>
+      <DettaglioLinee>
+        <NumeroLinea>1</NumeroLinea>
+        <Descrizione>Hosting VPS annuale</Descrizione>
+        <Quantita>1.00</Quantita>
+        <PrezzoUnitario>240.00</PrezzoUnitario>
+        <PrezzoTotale>240.00</PrezzoTotale>
+        <AliquotaIVA>22.00</AliquotaIVA>
+      </DettaglioLinee>
+      <DettaglioLinee>
+        <NumeroLinea>2</NumeroLinea>
+        <Descrizione>Dominio .it rinnovo</Descrizione>
+        <Quantita>1.00</Quantita>
+        <PrezzoUnitario>12.00</PrezzoUnitario>
+        <PrezzoTotale>12.00</PrezzoTotale>
+        <AliquotaIVA>22.00</AliquotaIVA>
+      </DettaglioLinee>
+      <DatiRiepilogo>
+        <AliquotaIVA>22.00</AliquotaIVA>
+        <ImponibileImporto>252.00</ImponibileImporto>
+        <Imposta>55.44</Imposta>
+      </DatiRiepilogo>
+    </DatiBeniServizi>
+    <DatiPagamento>
+      <CondizioniPagamento>TP02</CondizioniPagamento>
+      <DettaglioPagamento>
+        <ModalitaPagamento>MP05</ModalitaPagamento>
+        <DataScadenzaPagamento>2026-10-31</DataScadenzaPagamento>
+        <ImportoPagamento>307.44</ImportoPagamento>
+      </DettaglioPagamento>
+    </DatiPagamento>
+  </FatturaElettronicaBody>
+</p:FatturaElettronica>

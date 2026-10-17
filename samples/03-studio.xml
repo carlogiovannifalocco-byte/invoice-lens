@@ -1,0 +1,58 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<p:FatturaElettronica versione="FPR12" xmlns:p="http://ivaservizi.agenziaentrate.gov.it/docs/xsd/fatture/v1.2">
+  <FatturaElettronicaHeader>
+    <DatiTrasmissione>
+      <IdTrasmittente><IdPaese>IT</IdPaese><IdCodice>10000000003</IdCodice></IdTrasmittente>
+      <ProgressivoInvio>57</ProgressivoInvio>
+      <FormatoTrasmissione>FPR12</FormatoTrasmissione>
+      <CodiceDestinatario>0000000</CodiceDestinatario>
+    </DatiTrasmissione>
+    <CedentePrestatore>
+      <DatiAnagrafici>
+        <IdFiscaleIVA><IdPaese>IT</IdPaese><IdCodice>10000000003</IdCodice></IdFiscaleIVA>
+        <Anagrafica><Denominazione>Studio Bianchi Commercialisti</Denominazione></Anagrafica>
+        <RegimeFiscale>RF01</RegimeFiscale>
+      </DatiAnagrafici>
+    </CedentePrestatore>
+    <CessionarioCommittente>
+      <DatiAnagrafici>
+        <IdFiscaleIVA><IdPaese>IT</IdPaese><IdCodice>01234567890</IdCodice></IdFiscaleIVA>
+        <Anagrafica><Nome>Giulia</Nome><Cognome>Rossi</Cognome></Anagrafica>
+      </DatiAnagrafici>
+    </CessionarioCommittente>
+  </FatturaElettronicaHeader>
+  <FatturaElettronicaBody>
+    <DatiGenerali>
+      <DatiGeneraliDocumento>
+        <TipoDocumento>TD01</TipoDocumento>
+        <Divisa>EUR</Divisa>
+        <Data>2026-10-05</Data>
+        <Numero>57</Numero>
+        <ImportoTotaleDocumento>549.00</ImportoTotaleDocumento>
+      </DatiGeneraliDocumento>
+    </DatiGenerali>
+    <DatiBeniServizi>
+      <DettaglioLinee>
+        <NumeroLinea>1</NumeroLinea>
+        <Descrizione>Consulenza contabile trimestrale</Descrizione>
+        <Quantita>1.00</Quantita>
+        <PrezzoUnitario>450.00</PrezzoUnitario>
+        <PrezzoTotale>450.00</PrezzoTotale>
+        <AliquotaIVA>22.00</AliquotaIVA>
+      </DettaglioLinee>
+      <DatiRiepilogo>
+        <AliquotaIVA>22.00</AliquotaIVA>
+        <ImponibileImporto>450.00</ImponibileImporto>
+        <Imposta>99.00</Imposta>
+      </DatiRiepilogo>
+    </DatiBeniServizi>
+    <DatiPagamento>
+      <CondizioniPagamento>TP02</CondizioniPagamento>
+      <DettaglioPagamento>
+        <ModalitaPagamento>MP05</ModalitaPagamento>
+        <DataScadenzaPagamento>2026-11-05</DataScadenzaPagamento>
+        <ImportoPagamento>549.00</ImportoPagamento>
+      </DettaglioPagamento>
+    </DatiPagamento>
+  </FatturaElettronicaBody>
+</p:FatturaElettronica>

@@ -1,0 +1,156 @@
+<!doctype html>
+<html lang="it">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>FatturaLens</title>
+<style>
+  :root { --bg:#f7f6f2; --card:#fff; --ink:#1d1d1b; --muted:#6b6a65; --line:#e3e1da; --accent:#1f6f5c; --warn:#b4541a; --bad:#b3261e; }
+  @media (prefers-color-scheme: dark) { :root { --bg:#151514; --card:#1f1f1d; --ink:#ecebe6; --muted:#a3a29b; --line:#33322f; --accent:#5cc0a4; --warn:#f0a35e; --bad:#ff8a80; } }
+  * { box-sizing: border-box; }
+  body { margin:0; font:15px/1.5 system-ui, -apple-system, "Segoe UI", sans-serif; background:var(--bg); color:var(--ink); }
+  header { padding:24px 16px 8px; max-width:1100px; margin:auto; display:flex; flex-wrap:wrap; gap:12px; align-items:baseline; justify-content:space-between; }
+  h1 { margin:0; font-size:24px; } h1 span { color:var(--accent); }
+  .sub { color:var(--muted); margin:0; }
+  main { max-width:1100px; margin:auto; padding:8px 16px 48px; display:grid; gap:16px; }
+  .card { background:var(--card); border:1px solid var(--line); border-radius:12px; padding:16px; }
+  .grid { display:grid; gap:16px; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); }
+  #drop { border:2px dashed var(--line); border-radius:12px; padding:28px; text-align:center; cursor:pointer; }
+  #drop.over { border-color:var(--accent); }
+  .kpi { font-size:28px; font-weight:650; } .label { color:var(--muted); font-size:13px; }
+  table { width:100%; border-collapse:collapse; } th, td { text-align:left; padding:8px 6px; border-bottom:1px solid var(--line); vertical-align:top; }
+  th { font-size:12px; color:var(--muted); font-weight:600; text-transform:uppercase; letter-spacing:.03em; }
+  td.num { text-align:right; font-variant-numeric: tabular-nums; }
+  .tag { display:inline-block; padding:1px 8px; border-radius:99px; background:color-mix(in srgb, var(--accent) 15%, transparent); color:var(--accent); font-size:12px; }
+  .warn { color:var(--warn); font-size:13px; } .bad { color:var(--bad); }
+  .bar { height:8px; background:var(--accent); border-radius:4px; }
+  button, select, input[type=month] { font:inherit; padding:6px 12px; border-radius:8px; border:1px solid var(--line); background:var(--card); color:var(--ink); cursor:pointer; }
+  button.primary { background:var(--accent); color:#fff; border-color:var(--accent); }
+  .row { display:flex; flex-wrap:wrap; gap:8px; align-items:center; }
+  .scroll { overflow-x:auto; }
+  #summary p { margin:0 0 8px; }
+  .muted { color:var(--muted); }
+</style>
+</head>
+<body>
+<header>
+  <div>
+    <h1>Fattura<span>Lens</span></h1>
+    <p class="sub">Your invoices, sorted by an open model that never leaves your machine.</p>
+  </div>
+  <div class="row">
+    <input type="month" id="month">
+    <a href="/api/export.csv"><button>Export CSV</button></a>
+    <button id="demo" hidden>Load demo invoices</button>
+  </div>
+</header>
+<main>
+  <div class="card">
+    <div id="drop">Drop FatturaPA <b>.xml</b> / <b>.p7m</b> or <b>.pdf</b> invoices here, or click to choose
+      <input id="file" type="file" multiple accept=".xml,.p7m,.pdf" hidden></div>
+    <p id="status" class="muted" style="margin:8px 0 0"></p>
+  </div>
+
+  <div class="grid">
+    <div class="card"><div class="label">Invoices this month</div><div class="kpi" id="k-count">0</div></div>
+    <div class="card"><div class="label">Taxable spend</div><div class="kpi" id="k-taxable">€0</div></div>
+    <div class="card"><div class="label">Deductible VAT paid</div><div class="kpi" id="k-vat">€0</div></div>
+    <div class="card"><div class="label">Things to check</div><div class="kpi" id="k-anom">0</div></div>
+  </div>
+
+  <div class="grid">
+    <div class="card"><h3 style="margin-top:0">By category</h3><div id="cats" class="muted">No invoices yet.</div></div>
+    <div class="card"><h3 style="margin-top:0">Due in the next 30 days</h3><div id="due" class="muted">Nothing due.</div></div>
+  </div>
+
+  <div class="card">
+    <div class="row" style="justify-content:space-between"><h3 style="margin:0">Monthly summary</h3>
+      <button class="primary" id="sum-btn">Write summary with the model</button></div>
+    <div id="summary" class="muted" style="margin-top:8px">The local model writes a short summary in Italian and English from the numbers above.</div>
+  </div>
+
+  <div class="card scroll">
+    <h3 style="margin-top:0">Invoices</h3>
+    <table><thead><tr><th>Date</th><th>Supplier</th><th>Category</th><th class="num">Taxable</th><th class="num">VAT</th><th class="num">Total</th><th>Paid</th></tr></thead>
+    <tbody id="rows"></tbody></table>
+  </div>
+</main>
+<script>
+const CATS = ["software","hardware","travel","meals","office","utilities","telecom","professional_services","training","marketing","rent","other"];
+const eur = n => new Intl.NumberFormat("it-IT", {style:"currency", currency:"EUR"}).format(n);
+const esc = s => String(s ?? "").replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
+const $ = id => document.getElementById(id);
+const month = $("month");
+month.value = new Date().toISOString().slice(0, 7);
+
+async function api(path, opts) {
+  const r = await fetch(path, opts);
+  if (!r.ok) throw new Error((await r.json().catch(() => ({}))).detail || r.statusText);
+  return r.json();
+}
+
+async function refresh() {
+  const [list, dash] = await Promise.all([api("/api/invoices"), api("/api/dashboard?month=" + month.value)]);
+  $("k-count").textContent = dash.invoice_count;
+  $("k-taxable").textContent = eur(dash.taxable_total);
+  $("k-vat").textContent = eur(dash.vat_total);
+  $("k-anom").textContent = dash.anomalies.length;
+  const max = Math.max(1, ...Object.values(dash.by_category));
+  $("cats").innerHTML = Object.entries(dash.by_category).map(([c, v]) =>
+    `<div style="margin-bottom:8px"><div class="row" style="justify-content:space-between"><span>${esc(c.replace("_"," "))}</span><span>${eur(v)}</span></div>
+     <div class="bar" style="width:${(v / max * 100).toFixed(0)}%"></div></div>`).join("") || "No invoices this month.";
+  $("due").innerHTML = dash.upcoming_payments.map(p =>
+    `<div class="row" style="justify-content:space-between"><span>${esc(p.due_date)} · ${esc(p.supplier)}</span><b>${eur(p.amount)}</b></div>`).join("") || "Nothing due.";
+  $("rows").innerHTML = list.slice().reverse().map(r => {
+    const i = r.invoice;
+    const opts = CATS.map(c => `<option ${c === r.category ? "selected" : ""}>${c}</option>`).join("");
+    const notes = r.anomalies.map(a => `<div class="warn ${a.kind === "duplicate" || a.kind === "overdue" ? "bad" : ""}">⚠ ${esc(a.message)}</div>`).join("");
+    return `<tr><td>${esc(i.date)}</td>
+      <td>${esc(i.supplier.name)}<div class="muted" style="font-size:12px">n. ${esc(i.number)} · ${esc(i.lines.map(l => l.description).join(", "))}</div>${notes}</td>
+      <td><select data-cat="${r.id}">${opts}</select><div class="muted" style="font-size:12px">${esc(r.category_source)}: ${esc(r.category_reason)}</div></td>
+      <td class="num">${eur(i.taxable)}</td><td class="num">${eur(i.tax)}</td><td class="num">${eur(i.total)}</td>
+      <td><input type="checkbox" data-paid="${r.id}" ${r.paid ? "checked" : ""}></td></tr>`;
+  }).join("");
+}
+
+async function upload(files) {
+  if (!files.length) return;
+  const fd = new FormData();
+  for (const f of files) fd.append("files", f);
+  $("status").textContent = `Reading ${files.length} file(s)… the model categorizes each invoice locally.`;
+  try {
+    const res = await api("/api/invoices", {method: "POST", body: fd});
+    $("status").textContent = `Added ${res.stored.length} invoice(s).` + res.errors.map(e => ` ${e.file}: ${e.error}.`).join("");
+  } catch (e) { $("status").textContent = "Upload failed: " + e.message; }
+  refresh();
+}
+
+const drop = $("drop");
+drop.onclick = () => $("file").click();
+$("file").onchange = e => upload(e.target.files);
+drop.ondragover = e => { e.preventDefault(); drop.classList.add("over"); };
+drop.ondragleave = () => drop.classList.remove("over");
+drop.ondrop = e => { e.preventDefault(); drop.classList.remove("over"); upload(e.dataTransfer.files); };
+month.onchange = refresh;
+
+document.addEventListener("change", async e => {
+  const t = e.target;
+  if (t.dataset.paid) await api(`/api/invoices/${t.dataset.paid}/paid`, {method: "POST", headers: {"Content-Type": "application/json"}, body: JSON.stringify({paid: t.checked})});
+  if (t.dataset.cat) await api(`/api/invoices/${t.dataset.cat}/category`, {method: "POST", headers: {"Content-Type": "application/json"}, body: JSON.stringify({category: t.value})});
+  if (t.dataset.paid || t.dataset.cat) refresh();
+});
+
+$("sum-btn").onclick = async () => {
+  $("summary").textContent = "Writing…";
+  try {
+    const s = await api("/api/summary?month=" + month.value);
+    $("summary").innerHTML = `<p>🇮🇹 ${esc(s.it)}</p><p>🇬🇧 ${esc(s.en)}</p><p class="muted" style="font-size:12px">Written by ${esc(s.model)}</p>`;
+  } catch (e) { $("summary").textContent = e.message; }
+};
+
+$("demo").onclick = async () => { await api("/api/demo/load-samples", {method: "POST"}); month.value = "2026-10"; refresh(); };
+api("/api/config").then(c => { $("demo").hidden = !c.demo; }).catch(() => {});
+refresh();
+</script>
+</body>
+</html>
