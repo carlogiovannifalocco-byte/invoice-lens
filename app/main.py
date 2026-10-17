@@ -14,7 +14,7 @@ from pydantic import BaseModel
 
 from . import llm, store
 from .analysis import anomalies, month_stats
-from .ingest import ingest
+from .ingest import ingest, ingest_upload
 from .parser import InvoiceParseError
 
 if os.getenv("SENTRY_DSN"):
@@ -23,7 +23,7 @@ if os.getenv("SENTRY_DSN"):
     sentry_sdk.init(dsn=os.environ["SENTRY_DSN"], traces_sample_rate=1.0, send_default_pii=False)
 
 ROOT = Path(__file__).resolve().parent.parent
-MAX_UPLOAD = 5 * 1024 * 1024
+MAX_UPLOAD = 50 * 1024 * 1024  # ZIP archives of a month of invoices
 
 app = FastAPI(title="InvoiceLens")
 
@@ -60,10 +60,12 @@ async def upload(files: list[UploadFile]):
     for f in files:
         data = await f.read(MAX_UPLOAD + 1)
         if len(data) > MAX_UPLOAD:
-            errors.append({"file": f.filename, "error": "file larger than 5 MB"})
+            errors.append({"file": f.filename, "error": "file larger than 50 MB"})
             continue
         try:
-            results.extend(ingest(f.filename or "upload", data))
+            stored, failed = ingest_upload(f.filename or "upload", data)
+            results.extend(stored)
+            errors.extend(failed)
         except (InvoiceParseError, llm.LLMUnavailable) as exc:
             errors.append({"file": f.filename, "error": str(exc)})
     return {"stored": results, "errors": errors}
@@ -148,6 +150,37 @@ def export_csv():
         iter([buf.getvalue()]),
         media_type="text/csv",
         headers={"Content-Disposition": "attachment; filename=invoicelens.csv"},
+    )
+
+
+@app.get("/api/deadlines.ics")
+def deadlines_ics():
+    """Unpaid payment due dates as a calendar file, with a reminder two days before each."""
+    stamp = date.today().strftime("%Y%m%d")
+    lines = ["BEGIN:VCALENDAR", "VERSION:2.0", "PRODID:-//InvoiceLens//EN"]
+    for r in store.all_invoices():
+        if r["paid"]:
+            continue
+        inv = r["invoice"]
+        for i, p in enumerate(inv["payments"]):
+            if not p["due_date"]:
+                continue
+            summary = f"Pay {inv['supplier']['name']} {p['amount']:.2f} EUR (invoice {inv['number']})"
+            summary = summary.replace("\\", "\\\\").replace(",", "\\,").replace(";", "\\;")
+            lines += [
+                "BEGIN:VEVENT",
+                f"UID:invoice-{r['id']}-{i}@invoicelens",
+                f"DTSTAMP:{stamp}T000000Z",
+                f"DTSTART;VALUE=DATE:{p['due_date'].replace('-', '')}",
+                f"SUMMARY:{summary}",
+                "BEGIN:VALARM", "TRIGGER:-P2D", "ACTION:DISPLAY", f"DESCRIPTION:{summary}", "END:VALARM",
+                "END:VEVENT",
+            ]
+    lines.append("END:VCALENDAR")
+    return StreamingResponse(
+        iter(["\r\n".join(lines) + "\r\n"]),
+        media_type="text/calendar",
+        headers={"Content-Disposition": "attachment; filename=invoicelens-deadlines.ics"},
     )
 
 

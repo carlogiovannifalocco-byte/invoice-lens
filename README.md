@@ -4,16 +4,18 @@
 
 Every Italian freelancer receives dozens of *fatture elettroniche* a month as FatturaPA XML (often wrapped in signed `.p7m` files) plus the odd PDF. InvoiceLens reads them, categorizes each expense with **Gemma running locally**, flags what needs a second look, and gives you a monthly picture you can hand to your accountant.
 
-![InvoiceLens dashboard](docs/screenshot.png)
+![InvoiceLens demo](docs/demo.gif)
 
 ## What it does
 
+- **Imports a whole month at once**: drop the `.zip` you download from the Agenzia delle Entrate *Fatture e Corrispettivi* portal. SDI receipts are skipped, and invoices you already imported are not added twice.
 - **Reads FatturaPA XML and signed `.p7m`** (DER or base64) deterministically: supplier, VAT number, lines, VAT summary, payment terms. Multiple invoices in one file are supported.
 - **Reads PDF invoices** by extracting the text and asking the model to fill a fixed JSON schema (it is told never to invent values).
 - **Categorizes every expense** (software, travel, professional services...) with an open-weight model, with a one-line reason you can see and override.
 - **Flags anomalies** with plain arithmetic, not the model: duplicate invoices, VAT that does not match the rate, totals that do not add up, overdue payments.
 - **Dashboard**: monthly spend by category, deductible VAT, payments due in the next 30 days.
 - **Monthly summary** written by the model in Italian and English, from the computed numbers only.
+- **Calendar reminders**: export unpaid due dates as an `.ics` file with a reminder two days before.
 - **CSV export** that opens directly in Italian-locale spreadsheets (`;` separator, decimal comma).
 
 ## Why local and open

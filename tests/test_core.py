@@ -147,3 +147,49 @@ def test_model_unknown_category_becomes_other(monkeypatch):
     monkeypatch.setattr(llm.httpx, "post", lambda *a, **k: _FakeResponse('{"category": "pizza"}'))
     inv = parse_fatturapa(sample("01"))[0].to_dict()
     assert llm.categorize(inv)["category"] == "other"
+
+
+def _client(tmp_path, monkeypatch):
+    monkeypatch.setenv("INVOICELENS_DB", str(tmp_path / "t.db"))
+    monkeypatch.setenv("LLM_BASE_URL", "http://127.0.0.1:9")
+    from app.main import app
+
+    return TestClient(app)
+
+
+def test_zip_bulk_import_skips_receipts_and_reimports(tmp_path, monkeypatch):
+    import io
+    import zipfile
+
+    client = _client(tmp_path, monkeypatch)
+    buf = io.BytesIO()
+    with zipfile.ZipFile(buf, "w") as z:
+        z.writestr("ottobre/IT10000000001_a1.xml", sample("01"))
+        z.writestr("ottobre/IT10000000002_a2.xml", sample("02"))
+        z.writestr("ottobre/IT10000000001_a1_MT_001.xml", b"<MetadatiInvioFile/>")
+        z.writestr("__MACOSX/._x.xml", b"junk")
+        z.writestr("notes.txt", b"ignored")
+    files = [("files", ("ottobre.zip", buf.getvalue(), "application/zip"))]
+    first = client.post("/api/invoices", files=files).json()
+    assert len(first["stored"]) == 2 and first["errors"] == []
+    again = client.post("/api/invoices", files=files).json()
+    assert again["stored"] == []
+    assert len(client.get("/api/invoices").json()) == 2
+
+
+def test_bad_zip_reported(tmp_path, monkeypatch):
+    client = _client(tmp_path, monkeypatch)
+    res = client.post("/api/invoices", files=[("files", ("x.zip", b"nope", "application/zip"))]).json()
+    assert res["errors"][0]["error"] == "not a valid ZIP file"
+
+
+def test_deadlines_calendar_excludes_paid(tmp_path, monkeypatch):
+    client = _client(tmp_path, monkeypatch)
+    client.post("/api/invoices", files=[("files", ("a.xml", sample("01"), "text/xml")),
+                                        ("files", ("b.xml", sample("03"), "text/xml"))])
+    ids = {r["invoice"]["number"]: r["id"] for r in client.get("/api/invoices").json()}
+    client.post(f"/api/invoices/{ids['57']}/paid", json={"paid": True})
+    body = client.get("/api/deadlines.ics").text
+    assert "DTSTART;VALUE=DATE:20261031" in body
+    assert "Studio Bianchi" not in body
+    assert "Nuvola Hosting S.r.l. 307.44 EUR" in body

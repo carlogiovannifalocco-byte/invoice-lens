@@ -46,8 +46,8 @@
 </header>
 <main>
   <div class="card">
-    <div id="drop">Drop FatturaPA <b>.xml</b> / <b>.p7m</b> or <b>.pdf</b> invoices here, or click to choose
-      <input id="file" type="file" multiple accept=".xml,.p7m,.pdf" hidden></div>
+    <div id="drop">Drop FatturaPA <b>.xml</b> / <b>.p7m</b>, <b>.pdf</b> invoices, or the monthly <b>.zip</b> from the Agenzia delle Entrate portal
+      <input id="file" type="file" multiple accept=".xml,.p7m,.pdf,.zip" hidden></div>
     <p id="status" class="muted" style="margin:8px 0 0"></p>
   </div>
 
@@ -60,7 +60,7 @@
 
   <div class="grid">
     <div class="card"><h3 style="margin-top:0">By category</h3><div id="cats" class="muted">No invoices yet.</div></div>
-    <div class="card"><h3 style="margin-top:0">Due in the next 30 days</h3><div id="due" class="muted">Nothing due.</div></div>
+    <div class="card"><div class="row" style="justify-content:space-between"><h3 style="margin:0 0 12px">Due in the next 30 days</h3><a href="/api/deadlines.ics"><button>Add to calendar</button></a></div><div id="due" class="muted">Nothing due.</div></div>
   </div>
 
   <div class="card">

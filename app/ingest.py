@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import io
+import zipfile
 
 from pypdf import PdfReader
 
@@ -43,9 +44,57 @@ def ingest(filename: str, data: bytes) -> list[dict]:
 
     stored = []
     for inv in invoices:
+        if _already_imported(inv):
+            continue
         try:
             category = llm.categorize(inv)
         except llm.LLMUnavailable:
             category = llm.categorize_by_rules(inv)
         stored.append(store.add(filename, inv, category))
     return stored
+
+
+def _already_imported(inv: dict) -> bool:
+    """The same document imported twice (e.g. a monthly ZIP re-uploaded) is skipped, not flagged."""
+    key = (inv["supplier"]["vat_number"], inv["number"], inv["date"], round(inv["total"], 2))
+    return any(
+        (r["invoice"]["supplier"]["vat_number"], r["invoice"]["number"], r["invoice"]["date"],
+         round(r["invoice"]["total"], 2)) == key
+        for r in store.all_invoices()
+    )
+
+
+MAX_ZIP_MEMBERS = 500
+MAX_MEMBER_SIZE = 5 * 1024 * 1024
+MAX_ZIP_TOTAL = 100 * 1024 * 1024
+
+
+def ingest_upload(filename: str, data: bytes) -> tuple[list[dict], list[dict]]:
+    """Ingest one uploaded file. A .zip (like the bulk download from the Agenzia delle Entrate portal)
+    is unpacked and each invoice inside is ingested; SDI receipts and other non-invoices are skipped."""
+    if not filename.lower().endswith(".zip"):
+        return ingest(filename, data), []
+    stored, errors = [], []
+    try:
+        archive = zipfile.ZipFile(io.BytesIO(data))
+    except zipfile.BadZipFile:
+        return [], [{"file": filename, "error": "not a valid ZIP file"}]
+    members = [
+        m for m in archive.infolist()
+        if not m.is_dir() and not m.filename.startswith("__MACOSX")
+        and m.filename.lower().endswith((".xml", ".p7m", ".pdf"))
+    ]
+    if len(members) > MAX_ZIP_MEMBERS or sum(m.file_size for m in members) > MAX_ZIP_TOTAL:
+        return [], [{"file": filename, "error": "ZIP too large"}]
+    for m in members:
+        name = m.filename.rsplit("/", 1)[-1]
+        if m.file_size > MAX_MEMBER_SIZE:
+            errors.append({"file": name, "error": "file larger than 5 MB"})
+            continue
+        if "_MT_" in name or "_RC_" in name or "_NS_" in name:
+            continue  # SDI metadata and delivery receipts, not invoices
+        try:
+            stored.extend(ingest(name, archive.read(m)))
+        except (InvoiceParseError, llm.LLMUnavailable) as exc:
+            errors.append({"file": name, "error": str(exc)})
+    return stored, errors
