@@ -43,7 +43,7 @@ One page, no build step, no external scripts. Drag files anywhere on the page; e
 
 </details>
 
-These screenshots were taken with the model endpoint switched off, so every category is labelled `rules` (the keyword fallback). With Gemma running, the same column shows the model's name and its reason.
+The dashboard screenshots show the sample invoices categorized by Gemma 4 (`gemma-4-26b-a4b-it` on Google AI Studio's OpenAI-compatible endpoint, the same setup as the Render demo). The phone screenshot and the demo GIF are older and show the keyword fallback, labelled `rules`.
 
 ## Why local and open
 
