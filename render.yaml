@@ -1,18 +1,34 @@
-# Public demo on Render: sample invoices only, uploads disabled.
+# Public demo on Render (free plan): sample invoices only, uploads and deletes disabled.
+# Gemma is hosted by Google AI Studio (Gemini API, OpenAI-compatible endpoint), so the demo does not
+# depend on anyone's laptop. At start-up the ten sample invoices are shown at once (keyword rules)
+# and Gemma recategorizes them in the background, one call every LLM_MIN_INTERVAL seconds.
+# Free instances sleep after 15 minutes without traffic; the first visit after that takes about a minute.
 services:
   - type: web
     name: invoicelens-demo
     runtime: docker
     plan: free
-    healthCheckPath: /api/config
+    region: frankfurt
+    healthCheckPath: /healthz      # answers without calling the model
+    autoDeployTrigger: checksPass  # redeploy on push to main once the GitHub Actions checks are green
     envVars:
       - key: INVOICELENS_DEMO
         value: "1"
       - key: LLM_BASE_URL
-        sync: false   # an OpenAI-compatible endpoint serving Gemma
+        value: https://generativelanguage.googleapis.com/v1beta/openai
       - key: LLM_MODEL
-        value: gemma-3-27b-it
+        value: gemma-4-26b-a4b-it
       - key: LLM_API_KEY
-        sync: false
+        sync: false               # your Google AI Studio API key, entered in the Render dashboard
+      - key: LLM_MIN_INTERVAL
+        value: "4"                # at most 15 requests per minute, under the free-tier limit
+      - key: LLM_TIMEOUT
+        value: "60"
+      - key: LLM_WARMUP
+        value: "0"                # the demo preload already makes real calls
       - key: SENTRY_DSN
-        sync: false
+        sync: false               # optional: leave empty to run without tracing
+      - key: SENTRY_ENVIRONMENT
+        value: render-demo
+      - key: SENTRY_SEND_PROMPTS
+        value: "1"                # the demo only holds fake sample invoices, so prompts may be traced

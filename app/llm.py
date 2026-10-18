@@ -5,15 +5,12 @@ from __future__ import annotations
 import json
 import os
 import re
+import threading
 import time
-from contextlib import contextmanager
 
 import httpx
 
-try:
-    import sentry_sdk
-except ImportError:  # Sentry is optional
-    sentry_sdk = None
+from . import tracing
 
 CATEGORIES = [
     "software",
@@ -36,12 +33,29 @@ class LLMUnavailable(RuntimeError):
 
 
 def _config() -> dict:
+    base_url = os.getenv("LLM_BASE_URL", "http://localhost:11434/v1").rstrip("/")
     return {
-        "base_url": os.getenv("LLM_BASE_URL", "http://localhost:11434/v1").rstrip("/"),
+        "base_url": base_url,
         "model": os.getenv("LLM_MODEL", "gemma3:4b"),
         "api_key": os.getenv("LLM_API_KEY", "ollama"),
         "timeout": float(os.getenv("LLM_TIMEOUT", "300")),  # CPU-only laptops are slow
+        # Some hosted Gemma endpoints reject JSON mode or the system role with a 400. These switch them
+        # off up front; without them InvoiceLens notices the 400 and retries without the field.
+        "json_mode": os.getenv("LLM_JSON_MODE", "1") != "0",
+        "system_as_user": os.getenv("LLM_SYSTEM_AS_USER", "0") == "1",
+        # Seconds between two model calls, to stay under a free tier's requests-per-minute limit.
+        "min_interval": float(os.getenv("LLM_MIN_INTERVAL", "0")),
+        "provider": os.getenv("LLM_PROVIDER") or _guess_provider(base_url),
     }
+
+
+def _guess_provider(base_url: str) -> str:
+    """Provider name for gen_ai.provider.name, using the OpenTelemetry well-known values where they exist."""
+    if "generativelanguage.googleapis.com" in base_url:
+        return "gcp.gemini"
+    if "11434" in base_url or "ollama" in base_url:
+        return "ollama"
+    return "openai"  # any other OpenAI-compatible server (llama.cpp, vLLM...)
 
 
 def model_name() -> str:
@@ -73,17 +87,89 @@ def endpoint_reachable() -> bool:
     return ok
 
 
+# Fields an endpoint refused with a 400, remembered per (base_url, model) so later calls skip them.
+_unsupported: dict[tuple[str, str], set[str]] = {}
+_throttle_lock = threading.Lock()
+_last_call = [0.0]
+MAX_RATE_LIMIT_RETRIES = 2
+
+
+def _throttle(min_interval: float) -> None:
+    if min_interval <= 0:
+        return
+    with _throttle_lock:
+        wait = _last_call[0] + min_interval - time.monotonic()
+        if wait > 0:
+            time.sleep(wait)
+        _last_call[0] = time.monotonic()
+
+
+def build_payload(cfg: dict, system: str, user: str, json_mode: bool, system_role: bool) -> dict:
+    if system_role:
+        messages = [{"role": "system", "content": system}, {"role": "user", "content": user}]
+    else:
+        messages = [{"role": "user", "content": f"{system}\n\n{user}"}]
+    payload = {"model": cfg["model"], "temperature": 0, "messages": messages}
+    if json_mode:
+        payload["response_format"] = {"type": "json_object"}
+    return payload
+
+
+def _refused_field(error_text: str, json_mode: bool, system_role: bool) -> str | None:
+    """Which optional field a 400 most likely refers to: "json_mode", "system" or None (a real error)."""
+    text = error_text.lower()
+    if "api key" in text or "api_key" in text:
+        return None  # the Gemini API answers 400 to a bad key: not something a fallback can fix
+    if json_mode and any(k in text for k in ("json", "response_format", "response_mime_type", "mime")):
+        return "json_mode"
+    if system_role and any(k in text for k in ("system", "developer instruction", "instruction")):
+        return "system"
+    if json_mode:
+        return "json_mode"
+    if system_role:
+        return "system"
+    return None
+
+
+def _retry_after(resp: httpx.Response, attempt: int) -> float:
+    try:
+        return min(float(resp.headers.get("retry-after", "")), 30.0)
+    except ValueError:
+        return min(5.0 * 2 ** attempt, 30.0)
+
+
 def chat_json(system: str, user: str, task: str) -> dict:
-    """Ask the model for a JSON object. Each call is traced as a gen_ai span when Sentry is on."""
+    """Ask the model for a JSON object. Each call is a Sentry gen_ai.chat span with token usage,
+    and every retry or fallback is recorded on it."""
     cfg = _config()
-    payload = {
-        "model": cfg["model"],
-        "temperature": 0,
-        "response_format": {"type": "json_object"},
-        "messages": [{"role": "system", "content": system}, {"role": "user", "content": user}],
-    }
-    with _span(cfg["model"], task) as span:
-        for attempt in (1, 2):
+    key = (cfg["base_url"], cfg["model"])
+    refused = _unsupported.setdefault(key, set())
+    json_mode = cfg["json_mode"] and "json_mode" not in refused
+    system_role = not cfg["system_as_user"] and "system" not in refused
+    events: list[str] = []
+    with tracing.span(
+        "gen_ai.chat",
+        f"chat {cfg['model']}",
+        **{
+            "gen_ai.operation.name": "chat",
+            "gen_ai.provider.name": cfg["provider"],
+            "gen_ai.system": cfg["provider"],
+            "gen_ai.request.model": cfg["model"],
+            "gen_ai.request.temperature": 0,
+            "gen_ai.agent.name": tracing.AGENT_NAME,
+            "invoicelens.task": task,
+        },
+    ) as span:
+        if tracing.send_prompts():
+            tracing.set_data(span, **{
+                "gen_ai.system_instructions": [{"type": "text", "content": system}],
+                "gen_ai.input.messages": [{"role": "user", "parts": [{"type": "text", "content": user}]}],
+            })
+        timeouts = rate_limited = 0
+        started = time.monotonic()
+        while True:
+            payload = build_payload(cfg, system, user, json_mode, system_role)
+            _throttle(cfg["min_interval"])
             try:
                 resp = httpx.post(
                     f"{cfg['base_url']}/chat/completions",
@@ -95,40 +181,91 @@ def chat_json(system: str, user: str, task: str) -> dict:
                 break
             except httpx.TimeoutException as exc:
                 # The first call after a cold start also loads the model into memory; retry once.
-                if attempt == 2:
+                timeouts += 1
+                tracing.event(span, events, "timeout", task=task, seconds=cfg["timeout"], attempt=timeouts)
+                if timeouts == 2:
+                    tracing.fail(span, "timeout")
                     raise LLMUnavailable(str(exc)) from exc
+            except httpx.HTTPStatusError as exc:
+                status = exc.response.status_code
+                if status == 400:
+                    field = _refused_field(exc.response.text, json_mode, system_role)
+                    if field is None:
+                        tracing.fail(span, "http_400")
+                        raise LLMUnavailable(f"model endpoint refused the request: {exc.response.text[:300]}") from exc
+                    refused.add(field)
+                    json_mode = json_mode and field != "json_mode"
+                    system_role = system_role and field != "system"
+                    tracing.event(span, events, f"fallback: retry without {field}", task=task, model=cfg["model"])
+                    continue
+                if status == 429 and rate_limited < MAX_RATE_LIMIT_RETRIES:
+                    wait = _retry_after(exc.response, rate_limited)
+                    rate_limited += 1
+                    tracing.event(span, events, "rate limited (429): waiting", task=task, seconds=wait)
+                    time.sleep(wait)
+                    continue
+                tracing.fail(span, f"http_{status}")
+                raise LLMUnavailable(f"model endpoint returned HTTP {status}") from exc
             except httpx.HTTPError as exc:
+                tracing.fail(span, type(exc).__name__)
                 raise LLMUnavailable(str(exc)) from exc
         body = resp.json()
         usage = body.get("usage") or {}
-        if span is not None:
-            span.set_data("gen_ai.usage.input_tokens", usage.get("prompt_tokens"))
-            span.set_data("gen_ai.usage.output_tokens", usage.get("completion_tokens"))
-        return _parse_json(body["choices"][0]["message"]["content"])
+        choice = (body.get("choices") or [{}])[0]
+        content = (choice.get("message") or {}).get("content") or ""
+        tracing.set_data(span, **{
+            "gen_ai.response.model": body.get("model") or cfg["model"],
+            "gen_ai.response.id": body.get("id"),
+            "gen_ai.response.finish_reasons": [choice["finish_reason"]] if choice.get("finish_reason") else None,
+            "gen_ai.usage.input_tokens": usage.get("prompt_tokens"),
+            "gen_ai.usage.output_tokens": usage.get("completion_tokens"),
+            "gen_ai.usage.total_tokens": usage.get("total_tokens"),
+            "invoicelens.json_mode": json_mode,
+            "invoicelens.system_role": system_role,
+            "invoicelens.model_seconds": round(time.monotonic() - started, 2),
+        })
+        if tracing.send_prompts():
+            tracing.set_data(span, **{
+                "gen_ai.output.messages": [{"role": "assistant", "parts": [{"type": "text", "content": content}]}],
+            })
+        try:
+            return _parse_json(content)
+        except (LLMUnavailable, ValueError):
+            tracing.fail(span, "invalid_json")
+            raise
 
 
-@contextmanager
-def _span(model: str, task: str):
-    """A Sentry gen_ai span (agent tracing) when Sentry is configured, otherwise a no-op."""
-    if sentry_sdk is None or not sentry_sdk.get_client().is_active():
-        yield None
-        return
-    with sentry_sdk.start_span(op="gen_ai.chat", name=f"chat {model}") as span:
-        span.set_data("gen_ai.system", "openai_compatible")
-        span.set_data("gen_ai.operation.name", "chat")
-        span.set_data("gen_ai.request.model", model)
-        span.set_data("invoicelens.task", task)
-        yield span
+_THOUGHTS = re.compile(r"<(think|thought|thinking)>.*?</\1>", re.S | re.I)
+_FENCE = re.compile(r"```(?:json)?\s*(.*?)```", re.S | re.I)
 
 
 def _parse_json(content: str) -> dict:
-    try:
-        return json.loads(content)
-    except json.JSONDecodeError:
-        match = re.search(r"\{.*\}", content, re.S)
-        if not match:
-            raise LLMUnavailable("model did not return JSON")
-        return json.loads(match.group(0))
+    """Parse the model's JSON, tolerating code fences, a sentence around it, or a thinking block
+    (Gemma 4 can think before answering)."""
+    content = _THOUGHTS.sub("", content).strip()
+    candidates = [content] + _FENCE.findall(content)
+    decoder = json.JSONDecoder()
+    for candidate in candidates:
+        try:
+            value = json.loads(candidate)
+            if isinstance(value, dict):
+                return value
+        except json.JSONDecodeError:
+            pass
+    # Otherwise take the last {...} object that parses: the answer comes after any reasoning.
+    found, i = None, content.find("{")
+    while i != -1:
+        try:
+            value, end = decoder.raw_decode(content, i)
+        except json.JSONDecodeError:
+            i = content.find("{", i + 1)
+            continue
+        if isinstance(value, dict):
+            found = value
+        i = content.find("{", end)
+    if found is None:
+        raise LLMUnavailable("model did not return JSON")
+    return found
 
 
 CATEGORY_HINTS = {

@@ -118,3 +118,14 @@ def wipe() -> int:
     finally:
         conn.close()
     return removed
+
+
+def set_model_category(invoice_id: int, category: dict) -> bool:
+    """Replace a keyword-rules category with the model's. A manual choice made meanwhile is kept."""
+    with connect() as conn:
+        cur = conn.execute(
+            "UPDATE invoices SET category = ?, category_reason = ?, category_source = ? "
+            "WHERE id = ? AND category_source = 'rules'",
+            (category["category"], category.get("reason", ""), category["source"], invoice_id),
+        )
+        return cur.rowcount == 1

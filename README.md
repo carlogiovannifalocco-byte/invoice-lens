@@ -1,5 +1,9 @@
 # InvoiceLens
 
+[![CI](https://github.com/carlogiovannifalocco-byte/invoice-lens/actions/workflows/ci.yml/badge.svg)](https://github.com/carlogiovannifalocco-byte/invoice-lens/actions/workflows/ci.yml)
+[![Docker image](https://github.com/carlogiovannifalocco-byte/invoice-lens/actions/workflows/docker.yml/badge.svg)](https://github.com/carlogiovannifalocco-byte/invoice-lens/actions/workflows/docker.yml)
+[![Deploy to Render](https://render.com/images/deploy-to-render-button.svg)](https://render.com/deploy?repo=https://github.com/carlogiovannifalocco-byte/invoice-lens)
+
 **Your Italian e-invoices, sorted by an open model that never leaves your machine.**
 
 Every Italian freelancer receives dozens of *fatture elettroniche* a month as FatturaPA XML (often wrapped in signed `.p7m` files) plus the odd PDF. InvoiceLens reads them, categorizes each expense with **Gemma running locally**, flags what needs a second look, and gives you a monthly picture you can hand to your accountant.
@@ -77,12 +81,22 @@ uvicorn app.main:app --reload
 | `LLM_MODEL` | `gemma3:4b` | Model name at that endpoint |
 | `LLM_API_KEY` | `ollama` | Key for hosted endpoints |
 | `LLM_TIMEOUT` | `300` | Seconds to wait for one model reply (a 4B model on a laptop CPU takes 20-40 s per invoice); a timed-out call is retried once |
+| `LLM_JSON_MODE` | `1` | `0` = do not send `response_format: json_object` (for endpoints that refuse JSON mode) |
+| `LLM_SYSTEM_AS_USER` | `0` | `1` = put the system prompt at the top of the user message (for endpoints that refuse the system role) |
+| `LLM_MIN_INTERVAL` | `0` | Minimum seconds between two model calls, to stay under a free tier's requests-per-minute limit |
+| `LLM_PROVIDER` | guessed | Provider name reported to Sentry (`gcp.gemini`, `ollama`, `openai`...) |
 | `LLM_WARMUP` | `1` | Load the model in the background at startup, so the first invoice does not wait for it |
 | `INVOICELENS_DB` | `invoicelens.db` | SQLite file |
-| `SENTRY_DSN` | unset | When set, every model call is traced as a Sentry `gen_ai.chat` span (model, task, token usage) |
-| `INVOICELENS_DEMO` | unset | `1` = public demo: loads the sample invoices, disables uploads and deletes |
+| `SENTRY_DSN` | unset | When set, imports are traced for Sentry's AI Agents dashboard (see [Tracing with Sentry](#tracing-with-sentry)) |
+| `SENTRY_ENVIRONMENT` | `local` | Environment name shown in Sentry (`render-demo` on Render) |
+| `SENTRY_SEND_PROMPTS` | unset | `1` = also send prompts and replies to Sentry. Off by default because invoices hold client names and prices |
+| `SENTRY_TRACES_SAMPLE_RATE` | `1.0` | Share of requests traced |
+| `INVOICELENS_DEMO` | unset | `1` = public demo: preloads the sample invoices, categorizes them in the background, disables uploads and deletes |
+| `INVOICELENS_DEMO_PRELOAD` | `1` | `0` = in demo mode, do not load and categorize the samples at start-up |
 
-If the model endpoint is not reachable, invoices are still parsed and checked; categories fall back to a keyword list and are labelled `rules` in the UI.
+If an endpoint answers `400` to JSON mode or to the system role (Gemma on some hosted APIs did), InvoiceLens retries the call without that field and remembers it for the next calls, so the two switches above are only needed to skip that first failed request. A `429` is retried after the `Retry-After` delay, at most twice.
+
+If the model endpoint is not reachable, invoices are still parsed and checked; categories fall back to a keyword list and are labelled `rules` in the UI. `POST /api/recategorize` asks the model again for every invoice still labelled `rules` once it is back (manual choices are kept).
 
 ## Architecture
 
@@ -117,19 +131,74 @@ flowchart LR
 | `GET` | `/api/report.xlsx?month=YYYY-MM` | The month as an Excel workbook |
 | `POST` | `/api/wipe` | `{"confirm": "DELETE"}` deletes every invoice and vacuums the database (not in the public demo) |
 | `POST` | `/api/demo/load-samples` | Load the sample invoices: always in the demo, only into an empty store otherwise |
+| `POST` | `/api/recategorize` | Ask the model again for invoices labelled `rules`, in the background (progress in `/api/config` under `background`) |
+| `GET` | `/healthz` | Liveness check that does not call the model (used by Render) |
+| `GET` | `/api/health` | A real round trip to the model |
 
 ## Deploy the public demo on Render
 
-`render.yaml` deploys a demo with the sample invoices only (uploads are disabled so nobody uploads real data to a shared server). Point `LLM_BASE_URL`/`LLM_API_KEY` at an OpenAI-compatible endpoint serving Gemma, for example Google AI Studio's OpenAI-compatible API with `gemma-3-27b-it`.
+[![Deploy to Render](https://render.com/images/deploy-to-render-button.svg)](https://render.com/deploy?repo=https://github.com/carlogiovannifalocco-byte/invoice-lens)
+
+The public demo runs on Render's free plan with **Gemma 4 hosted by Google AI Studio** (the Gemini API's OpenAI-compatible endpoint), so it does not depend on anyone's laptop. [`render.yaml`](render.yaml) sets everything except your API key:
+
+- demo mode: only the ten fake sample invoices, uploads and deletes disabled, so nobody puts real data on a shared server;
+- at start-up the samples appear at once (keyword rules), then Gemma recategorizes them in the background, one call every 4 seconds (`LLM_MIN_INTERVAL`) to stay under the free tier's per-minute limit; after about a minute the category column shows `gemma-4-26b-a4b-it` and its reason;
+- the monthly summary is cached while the numbers do not change, so visitors clicking the button do not use up the quota;
+- health check on `/healthz`, which never calls the model;
+- redeploys on every push to `main` once the GitHub Actions checks pass (`autoDeployTrigger: checksPass`).
+
+Step by step:
+
+1. Get a Gemini API key: open [Google AI Studio](https://aistudio.google.com/apikey), sign in, click **Create API key** and copy it. The free tier is enough for the demo; check your model's limits on AI Studio's rate-limit page.
+2. Click the **Deploy to Render** button above (or in the [Render dashboard](https://dashboard.render.com): **New** > **Blueprint**, then pick this repository). Sign in with GitHub if asked.
+3. Render reads `render.yaml` and shows one service, `invoicelens-demo` (free plan, Docker). Paste the AI Studio key into **LLM_API_KEY**. Leave **SENTRY_DSN** empty, or paste a DSN (see [Tracing with Sentry](#tracing-with-sentry)).
+4. Click **Deploy Blueprint**. The first build takes a few minutes; then open the `https://invoicelens-demo-....onrender.com` URL shown on the service page.
+5. Check it works: the header badge says the model is reachable, and after about a minute every invoice is categorized by `gemma-4-26b-a4b-it` instead of `rules`.
+
+Free instances sleep after 15 minutes without traffic, and the first visit after that takes about a minute to wake up. The demo database lives in `/tmp`, so every restart reloads and recategorizes the samples (10 model calls). If Gemma 4 is renamed on the Gemini API, change `LLM_MODEL` in the service's **Environment** tab; `GET https://generativelanguage.googleapis.com/v1beta/openai/models` with your key lists the available models.
+
+## Tracing with Sentry
+
+With `SENTRY_DSN` set, every import is traced with Sentry's [AI agent span conventions](https://docs.sentry.io/platforms/python/agent-tracing/manual-instrumentation/), so it shows up in Sentry's **AI Agents** dashboards (agent runs, LLM calls, latency, tokens and estimated cost per model, tool calls and tool errors):
+
+```
+invoke_agent InvoiceLens categorizer          gen_ai.invoke_agent   one upload, sample load or recategorization
+└── invoice 2026/0412 Nuvola Hosting S.r.l.   function              one per invoice
+    ├── execute_tool parse_fatturapa          gen_ai.execute_tool   deterministic XML / .p7m parsing
+    ├── execute_tool duplicate_check          gen_ai.execute_tool
+    ├── chat gemma-4-26b-a4b-it               gen_ai.chat           model, provider, input/output tokens, latency
+    ├── execute_tool keyword_rules            gen_ai.execute_tool   only when the model failed
+    └── execute_tool anomaly_checks           gen_ai.execute_tool   VAT, totals, duplicates, overdue
+```
+
+Timeouts, retries and fallbacks are recorded on the span where they happened (`invoicelens.events`, for example `["timeout"]` or `["fallback: retry without json_mode"]`), as breadcrumbs, and a failed model call gets an error status and an `error.type` (`timeout`, `http_429`, `ConnectError`, `invalid_json`). `invoicelens.model_seconds` is the time spent waiting for the model, including retries. Prompts and replies are only sent with `SENTRY_SEND_PROMPTS=1`; the public demo turns it on because it only holds fake invoices.
+
+1. Create a free account at [sentry.io](https://sentry.io/signup/).
+2. **Projects** > **Create Project**, choose **Python** (or FastAPI), name it `invoicelens`.
+3. Copy the **DSN** it shows (also under **Settings** > **Projects** > `invoicelens` > **Client Keys (DSN)**).
+4. Set it where InvoiceLens runs: `SENTRY_DSN=... uvicorn app.main:app` locally, or the `SENTRY_DSN` variable in the Render service's **Environment** tab. Optionally set `SENTRY_ENVIRONMENT`.
+5. Import a few invoices (or open the demo, which categorizes the samples at start-up).
+6. In Sentry open **Dashboards** and pick the prebuilt **AI Agents** dashboard (in some accounts it is under **Insights** > **AI** > **Agents**); open a trace to see the spans above.
+
+Token cost is estimated by Sentry from the model name; Gemma on the free tier or on your own machine costs nothing, so the cost column may stay empty or at zero.
+
+## Continuous integration
+
+GitHub Actions runs on every push and pull request:
+
+- [`ci.yml`](.github/workflows/ci.yml): the test suite on Python 3.12;
+- [`docker.yml`](.github/workflows/docker.yml): builds the Docker image, starts it in demo mode and checks that the sample invoices load and the accountant pack downloads; on `main` it pushes the image to `ghcr.io/carlogiovannifalocco-byte/invoice-lens`.
+
+Dependabot keeps the actions, Python packages and base image up to date. Render deploys `main` only after these checks pass.
 
 ## Tests
 
 ```bash
-pip install -r requirements-dev.txt
-pytest
+pip install -r requirements.txt -r requirements-dev.txt
+python -m pytest -q
 ```
 
-The tests cover the XML parser, signed `.p7m` extraction (they sign a sample with a throwaway certificate), entity-expansion protection, anomaly rules, the model request format, and the HTTP API (uploads and duplicate reporting, ZIP import, category overrides, paid status, deletes, the status check and sample loading), the accountant pack and Excel report, formula neutralization, plain-language explanations and the delete-all endpoint.
+The tests cover the XML parser, signed `.p7m` extraction (they sign a sample with a throwaway certificate), entity-expansion protection, anomaly rules, the model request format, and the HTTP API (uploads and duplicate reporting, ZIP import, category overrides, paid status, deletes, the status check and sample loading), the accountant pack and Excel report, formula neutralization, plain-language explanations and the delete-all endpoint. `tests/test_hosted_and_tracing.py` covers the hosted-endpoint fallbacks (JSON mode or system role refused, rate limits, thinking blocks around the JSON), the background recategorization, and the shape of the Sentry agent traces.
 
 ## Limits
 

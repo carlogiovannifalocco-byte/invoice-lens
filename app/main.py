@@ -4,9 +4,11 @@ from __future__ import annotations
 
 import csv
 import io
+import json
 import os
 import re
 import threading
+import time
 from contextlib import asynccontextmanager
 from datetime import date
 from pathlib import Path
@@ -15,25 +17,33 @@ from fastapi import FastAPI, HTTPException, UploadFile
 from fastapi.responses import FileResponse, Response, StreamingResponse
 from pydantic import BaseModel
 
-from . import llm, store
+from . import ingest as ingest_mod
+from . import llm, store, tracing
 from .accountant import DISCLAIMER_EN, accountant_pack, csv_safe, explain, report_xlsx, tax_hint
 from .analysis import anomalies, month_stats
 from .ingest import ingest, ingest_upload
 from .parser import InvoiceParseError
 
-if os.getenv("SENTRY_DSN"):
-    import sentry_sdk
-
-    sentry_sdk.init(dsn=os.environ["SENTRY_DSN"], traces_sample_rate=1.0, send_default_pii=False)
+tracing.init()
 
 ROOT = Path(__file__).resolve().parent.parent
 MAX_UPLOAD = 50 * 1024 * 1024  # ZIP archives of a month of invoices
 
 
 
+def _demo_preload() -> None:
+    """Public demo start-up: show the sample invoices at once (keyword rules), then let the model
+    categorize them in the background, so the dashboard ends up with the model's labels."""
+    if store.count() == 0:
+        _load_samples(use_model=False)
+    ingest_mod.recategorize("demo_preload")
+
+
 @asynccontextmanager
 async def lifespan(_app):
-    if os.getenv("LLM_WARMUP", "1") != "0":
+    if _demo() and os.getenv("INVOICELENS_DEMO_PRELOAD", "1") != "0":
+        threading.Thread(target=_demo_preload, daemon=True).start()
+    elif os.getenv("LLM_WARMUP", "1") != "0":
         threading.Thread(target=llm.warm_up, daemon=True).start()
     yield
 
@@ -46,14 +56,29 @@ def index():
     return FileResponse(ROOT / "app" / "static" / "index.html")
 
 
+@app.get("/healthz")
+def healthz():
+    """Liveness for the hosting platform: answers without calling the model."""
+    return {"ok": True}
+
+
 @app.get("/api/health")
 def health():
+    """A real round trip to the model. The public demo answers from a one-minute cache."""
+    now = time.monotonic()
+    if _demo() and _health_cache and now - _health_cache[0] < 60:
+        return _health_cache[1]
     try:
         llm.chat_json('Reply with JSON {"ok": true}.', "ping", "health")
         model_ok = True
     except llm.LLMUnavailable:
         model_ok = False
-    return {"model": llm.model_name(), "model_reachable": model_ok}
+    result = {"model": llm.model_name(), "model_reachable": model_ok}
+    _health_cache[:] = [now, result]
+    return result
+
+
+_health_cache: list = []
 
 
 def _demo() -> bool:
@@ -77,6 +102,7 @@ def config():
         "categories": llm.CATEGORIES,
         "tax_hint_disclaimer": DISCLAIMER_EN,
         "storage": None if _demo() else os.path.abspath(store.db_path()),
+        "background": dict(ingest_mod.progress),
     }
 
 
@@ -85,6 +111,15 @@ async def upload(files: list[UploadFile]):
     if _demo():
         raise HTTPException(403, "The public demo only shows the sample invoices. Run InvoiceLens locally for your own files.")
     results, errors, skipped = [], [], []
+    cfg = llm._config()
+    with tracing.agent_run("upload", cfg["model"], cfg["provider"]) as agent:
+        await _upload_files(files, results, errors, skipped)
+        tracing.set_data(agent, **{"invoicelens.stored": len(results), "invoicelens.errors": len(errors),
+                                   "invoicelens.skipped": len(skipped)})
+    return {"stored": results, "errors": errors, "skipped": skipped}
+
+
+async def _upload_files(files, results, errors, skipped):
     for f in files:
         data = await f.read(MAX_UPLOAD + 1)
         if len(data) > MAX_UPLOAD:
@@ -96,7 +131,6 @@ async def upload(files: list[UploadFile]):
             errors.extend(failed)
         except (InvoiceParseError, llm.LLMUnavailable) as exc:
             errors.append({"file": f.filename, "error": str(exc)})
-    return {"stored": results, "errors": errors, "skipped": skipped}
 
 
 @app.get("/api/invoices")
@@ -189,11 +223,24 @@ def dashboard(month: str | None = None):
 @app.get("/api/summary")
 def summary(month: str | None = None):
     stats = month_stats(store.all_invoices(), month or _current_month())
+    # The public demo reuses a summary while the numbers are unchanged, so visitors clicking the
+    # button do not burn the hosted model's free-tier quota.
+    key = json.dumps(stats, sort_keys=True, default=str)
+    if _demo() and key in _summary_cache:
+        return _summary_cache[key]
     try:
         text = llm.monthly_summary(stats)
     except llm.LLMUnavailable as exc:
         raise HTTPException(503, f"model not reachable: {exc}")
-    return {"model": llm.model_name(), **text}
+    result = {"model": llm.model_name(), **text}
+    if _demo():
+        if len(_summary_cache) > 24:
+            _summary_cache.clear()
+        _summary_cache[key] = result
+    return result
+
+
+_summary_cache: dict[str, dict] = {}
 
 
 @app.get("/api/export.csv")
@@ -305,15 +352,37 @@ def wipe(body: WipeBody):
     return {"deleted": store.wipe(), "storage": os.path.abspath(store.db_path())}
 
 
+def _load_samples(use_model: bool = True) -> int:
+    cfg = llm._config()
+    loaded = []
+    with tracing.agent_run("load_samples", cfg["model"], cfg["provider"]) as agent:
+        for path in sorted((ROOT / "samples").glob("*.xml")):
+            loaded.extend(ingest(path.name, path.read_bytes(), use_model=use_model))
+        tracing.set_data(agent, **{"invoicelens.stored": len(loaded)})
+    return len(loaded)
+
+
 @app.post("/api/demo/load-samples")
 def load_samples():
-    """Load the bundled fake invoices. In the public demo (INVOICELENS_DEMO=1) this resets the store;
-    a local install allows it only while it has no invoices yet."""
+    """Load the bundled fake invoices. In the public demo (INVOICELENS_DEMO=1) this resets the store,
+    shows the samples at once with the keyword rules and lets the model recategorize them in the
+    background; a local install allows it only while it has no invoices yet."""
     if not _can_load_samples():
         raise HTTPException(403, "sample invoices can only be loaded into an empty InvoiceLens")
     if _demo():
+        if ingest_mod.progress["running"]:
+            return {"loaded": store.count(), "categorizing": True}
         store.clear()
-    loaded = []
-    for path in sorted((ROOT / "samples").glob("*.xml")):
-        loaded.extend(ingest(path.name, path.read_bytes()))
-    return {"loaded": len(loaded)}
+        loaded = _load_samples(use_model=False)
+        return {"loaded": loaded, "categorizing": ingest_mod.recategorize_in_background("demo_reload")}
+    return {"loaded": _load_samples()}
+
+
+@app.post("/api/recategorize")
+def recategorize():
+    """Ask the model again for every invoice labelled "rules" (imported while it was offline). Runs in the
+    background; /api/config reports progress under "background". Manual categories are kept."""
+    started = ingest_mod.recategorize_in_background()
+    if not started and not ingest_mod.progress["running"]:
+        raise HTTPException(503, "model not reachable")
+    return {"started": started, **ingest_mod.progress}

@@ -3,16 +3,20 @@
 from __future__ import annotations
 
 import io
+import threading
 import zipfile
 
 from pypdf import PdfReader
 
-from . import llm, store
+from . import llm, store, tracing
+from .analysis import anomalies
 from .parser import InvoiceParseError, parse_fatturapa
 
 
 def _pdf_invoice(data: bytes) -> dict:
-    text = "\n".join(page.extract_text() or "" for page in PdfReader(io.BytesIO(data)).pages)
+    with tracing.tool("extract_pdf_text", "Read the PDF text layer with pypdf") as sp:
+        text = "\n".join(page.extract_text() or "" for page in PdfReader(io.BytesIO(data)).pages)
+        tracing.result(sp, {"characters": len(text)})
     if not text.strip():
         raise InvoiceParseError("PDF has no text layer (scanned image?)")
     f = llm.extract_from_text(text)
@@ -36,27 +40,107 @@ def _pdf_invoice(data: bytes) -> dict:
     }
 
 
-def ingest(filename: str, data: bytes, skipped: list[dict] | None = None) -> list[dict]:
+def ingest(filename: str, data: bytes, skipped: list[dict] | None = None, use_model: bool = True) -> list[dict]:
     """Parse, categorize and store. Invoices already imported are not stored again; when `skipped`
-    is given, each one is reported there so the UI can say "duplicate skipped"."""
+    is given, each one is reported there so the UI can say "duplicate skipped". With use_model=False
+    the keyword rules categorize right away (the demo does that, then asks the model in the background)."""
     if filename.lower().endswith(".pdf"):
         invoices = [_pdf_invoice(data)]
     else:
-        invoices = [inv.to_dict() for inv in parse_fatturapa(data)]
+        with tracing.tool("parse_fatturapa", "Parse FatturaPA XML or signed .p7m deterministically",
+                          {"file": filename}) as sp:
+            invoices = [inv.to_dict() for inv in parse_fatturapa(data)]
+            tracing.result(sp, {"invoices": len(invoices)})
 
     stored = []
     for inv in invoices:
-        if _already_imported(inv):
-            if skipped is not None:
-                skipped.append({"file": filename, "number": inv["number"],
-                                "supplier": inv["supplier"]["name"], "reason": "already imported"})
-            continue
-        try:
-            category = llm.categorize(inv)
-        except llm.LLMUnavailable:
-            category = llm.categorize_by_rules(inv)
-        stored.append(store.add(filename, inv, category))
+        with tracing.span("function", f"invoice {inv['number']} {inv['supplier']['name']}"[:120],
+                          **{"invoicelens.file": filename}) as inv_span:
+            with tracing.tool("duplicate_check", "Skip an invoice that is already stored") as sp:
+                duplicate = _already_imported(inv)
+                tracing.result(sp, {"duplicate": duplicate})
+            if duplicate:
+                if skipped is not None:
+                    skipped.append({"file": filename, "number": inv["number"],
+                                    "supplier": inv["supplier"]["name"], "reason": "already imported"})
+                continue
+            category = _categorize(inv, inv_span) if use_model else _rules(inv)
+            record = store.add(filename, inv, category)
+            _check(record)
+            tracing.set_data(inv_span, **{"invoicelens.category": category["category"],
+                                          "invoicelens.category_source": category["source"]})
+            stored.append(record)
     return stored
+
+
+def _rules(inv: dict) -> dict:
+    with tracing.tool("keyword_rules", "Keyword fallback used when the model is not reachable") as sp:
+        category = llm.categorize_by_rules(inv)
+        tracing.result(sp, category)
+        return category
+
+
+def _categorize(inv: dict, inv_span=None) -> dict:
+    try:
+        return llm.categorize(inv)
+    except llm.LLMUnavailable as exc:
+        tracing.event(inv_span, [], "fallback: keyword rules", reason=str(exc)[:200])
+        return _rules(inv)
+
+
+def _check(record: dict) -> None:
+    """Run the arithmetic checks once at import so the trace shows what was flagged."""
+    with tracing.tool("anomaly_checks", "Duplicates, VAT vs rate, totals, overdue: plain arithmetic") as sp:
+        if sp is None:
+            return
+        flags = anomalies(record, store.all_invoices())
+        tracing.result(sp, {"flags": [a["kind"] for a in flags]})
+
+
+_background = threading.Lock()
+progress = {"running": False, "done": 0, "total": 0}
+
+
+def recategorize(task: str = "recategorize") -> int:
+    """Ask the model again for every invoice still labelled "rules" (imported while the model was offline,
+    or preloaded by the demo). Manual choices are never touched. Stops after two failures in a row."""
+    if not _background.acquire(blocking=False):
+        return 0
+    try:
+        pending = [r for r in store.all_invoices() if r["category_source"] == "rules"]
+        progress.update(running=True, done=0, total=len(pending))
+        cfg = llm._config()
+        updated = failures = 0
+        with tracing.agent_run(task, cfg["model"], cfg["provider"], len(pending)) as agent:
+            for r in pending:
+                inv = r["invoice"]
+                with tracing.span("function", f"invoice {inv['number']} {inv['supplier']['name']}"[:120]) as sp:
+                    try:
+                        category = llm.categorize(inv)
+                    except llm.LLMUnavailable as exc:
+                        failures += 1
+                        tracing.event(sp, [], "model unavailable: keeping rules", reason=str(exc)[:200])
+                        if failures == 2:
+                            break
+                        continue
+                    failures = 0
+                    if store.set_model_category(r["id"], category):
+                        updated += 1
+                    tracing.set_data(sp, **{"invoicelens.category": category["category"]})
+                progress["done"] += 1
+            tracing.set_data(agent, **{"invoicelens.updated": updated})
+        return updated
+    finally:
+        progress["running"] = False
+        _background.release()
+
+
+def recategorize_in_background(task: str = "recategorize") -> bool:
+    """Start recategorize() in a thread when the model endpoint answers. Returns whether it started."""
+    if progress["running"] or not llm.endpoint_reachable():
+        return False
+    threading.Thread(target=recategorize, args=(task,), daemon=True).start()
+    return True
 
 
 def _already_imported(inv: dict) -> bool:
