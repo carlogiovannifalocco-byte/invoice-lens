@@ -100,6 +100,8 @@ CATEGORY_IT = {
 
 ANOMALY_IT = {
     "duplicate": "Possibile doppione",
+    "amount_conflict": "Stesso numero, importi diversi",
+    "possible_duplicate": "Stesso importo a pochi giorni",
     "vat_mismatch": "IVA non coerente con l'aliquota",
     "total_mismatch": "Totale diverso da imponibile + IVA",
     "overdue": "Pagamento scaduto",

@@ -388,3 +388,21 @@ def test_wipe_deletes_everything_only_with_confirmation(tmp_path, monkeypatch):
     assert b"Nuvola" not in (tmp_path / "t.db").read_bytes()  # vacuumed, not just unlinked rows
     monkeypatch.setenv("INVOICELENS_DEMO", "1")
     assert client.post("/api/wipe", json={"confirm": "DELETE"}).status_code == 403
+
+
+def _with(record, **changes):
+    return dict(record, invoice=dict(record["invoice"], **changes))
+
+
+def test_amount_conflict_and_possible_duplicate():
+    base = _record(1, "01")
+    conflict = _with(_record(2, "01"), total=base["invoice"]["total"] + 10)
+    flags = [a for a in anomalies(conflict, [base, conflict], TODAY) if a["kind"] != "overdue"]
+    assert [a["kind"] for a in flags] == ["amount_conflict"]
+    assert flags[0]["rule"] and flags[0]["message_it"]
+
+    near = _with(_record(3, "01"), number="2026/9999")
+    assert "possible_duplicate" in {a["kind"] for a in anomalies(near, [base, near], TODAY)}
+
+    next_month = _with(near, date="2026-11-01")
+    assert "possible_duplicate" not in {a["kind"] for a in anomalies(next_month, [base, next_month], TODAY)}

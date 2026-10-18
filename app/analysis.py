@@ -6,6 +6,7 @@ from collections import defaultdict
 from datetime import date, timedelta
 
 VAT_TOLERANCE = 0.02  # FatturaPA allows rounding differences of a cent per summary line
+POSSIBLE_DUPLICATE_DAYS = 10  # wider windows would flag normal monthly bills of the same amount
 
 
 # The exact rule behind each flag, shown next to it so nobody has to trust a black box.
@@ -13,6 +14,16 @@ RULES = {
     "duplicate": (
         "Flagged when another invoice has the same supplier VAT number, the same invoice number and the same year.",
         "Segnalata se un'altra fattura ha stessa partita IVA del fornitore, stesso numero e stesso anno.",
+    ),
+    "amount_conflict": (
+        "Flagged when another invoice has the same supplier VAT number, number and year but a different total.",
+        "Segnalata se un'altra fattura ha stessa partita IVA, stesso numero e stesso anno ma un totale diverso.",
+    ),
+    "possible_duplicate": (
+        f"Flagged when the same supplier billed the same total within {POSSIBLE_DUPLICATE_DAYS} days under a "
+        "different invoice number.",
+        f"Segnalata se lo stesso fornitore ha fatturato lo stesso totale entro {POSSIBLE_DUPLICATE_DAYS} giorni "
+        "con un numero diverso.",
     ),
     "vat_mismatch": (
         "For each VAT line: taxable × rate, rounded to the cent, must equal the VAT on the invoice within €0.02.",
@@ -39,24 +50,53 @@ def anomalies(record: dict, others: list[dict], today: date | None = None) -> li
     inv = record["invoice"]
     found = []
 
+    same_number = near_total = None
     for other in others:
         o = other["invoice"]
-        if (
-            other["id"] != record.get("id")
-            and o["supplier"]["vat_number"] == inv["supplier"]["vat_number"]
-            and o["number"] == inv["number"]
-            and o["date"][:4] == inv["date"][:4]
+        if other["id"] == record.get("id") or o["supplier"]["vat_number"] != inv["supplier"]["vat_number"]:
+            continue
+        if o["number"] == inv["number"] and o["date"][:4] == inv["date"][:4]:
+            same_number = same_number or other
+        elif (
+            abs(o["total"] - inv["total"]) <= VAT_TOLERANCE
+            and inv["total"] > 0
+            and abs((date.fromisoformat(o["date"]) - date.fromisoformat(inv["date"])).days) <= POSSIBLE_DUPLICATE_DAYS
         ):
+            near_total = near_total or other
+
+    if same_number:
+        o = same_number["invoice"]
+        if abs(o["total"] - inv["total"]) > VAT_TOLERANCE:
+            found.append(
+                {
+                    "kind": "amount_conflict",
+                    "message": f"Same number {inv['number']} as invoice #{same_number['id']} but the total is "
+                    f"{inv['total']:.2f} here and {o['total']:.2f} there",
+                    "message_it": f"Stesso numero {inv['number']} della fattura #{same_number['id']} ma il totale è "
+                    f"{_it(inv['total'])} qui e {_it(o['total'])} là",
+                }
+            )
+        else:
             found.append(
                 {
                     "kind": "duplicate",
-                    "message": f"Same number {inv['number']} as invoice #{other['id']} "
-                    f"(dated {o['date']}, file {other.get('filename', '?')})",
-                    "message_it": f"Stesso numero {inv['number']} della fattura #{other['id']} "
-                    f"(del {o['date']}, file {other.get('filename', '?')})",
+                    "message": f"Same number {inv['number']} as invoice #{same_number['id']} "
+                    f"(dated {o['date']}, file {same_number.get('filename', '?')})",
+                    "message_it": f"Stesso numero {inv['number']} della fattura #{same_number['id']} "
+                    f"(del {o['date']}, file {same_number.get('filename', '?')})",
                 }
             )
-            break
+    elif near_total:
+        o = near_total["invoice"]
+        found.append(
+            {
+                "kind": "possible_duplicate",
+                "message": f"Same total {inv['total']:.2f} as invoice #{near_total['id']} "
+                f"(n. {o['number']}, dated {o['date']}) from the same supplier",
+                "message_it": f"Stesso totale {_it(inv['total'])} della fattura #{near_total['id']} "
+                f"(n. {o['number']}, del {o['date']}) dello stesso fornitore",
+            }
+        )
 
     for row in inv["vat_summary"]:
         expected = round(row["taxable"] * row["rate"] / 100, 2)

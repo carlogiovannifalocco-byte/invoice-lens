@@ -326,6 +326,8 @@ SUMMARY_SYSTEM = (
 
 _ANOMALY_LABELS = {
     "duplicate": "Possible duplicate",
+    "amount_conflict": "Same number, different amounts",
+    "possible_duplicate": "Same amount a few days apart",
     "vat_mismatch": "VAT does not match the rate",
     "total_mismatch": "Total does not add up",
     "overdue": "Overdue",
