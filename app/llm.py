@@ -182,7 +182,8 @@ SUMMARY_SYSTEM = (
     "You write a short monthly expense summary for an Italian freelancer from a list of facts computed "
     "by their bookkeeping app. Use only these facts: do not add numbers, suppliers or problems that are "
     "not listed, and do not call an invoice late unless it is listed under 'Overdue'. At most four "
-    "sentences per language. The Italian text addresses the reader as 'tu' and uses no English words. "
+    "sentences per language, in a plain professional tone: no greetings, no compliments, no exclamation marks. "
+    "The Italian text addresses the reader as 'tu' and uses no English words (write 'fattura', never 'invoice'). "
     'Reply with JSON: {"it": "<paragraph in Italian>", "en": "<same paragraph in English>"}'
 )
 

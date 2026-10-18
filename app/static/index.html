@@ -751,7 +751,7 @@ function renderNarr() {
       : `The model endpoint is offline, so the written summary is not available right now. The numbers above are computed in code and are always available. Start the model (for example <code>ollama serve</code>) and try again.`}</span></div>`;
     return;
   }
-  if (s.loading) { box.innerHTML = `<div class="note"><span class="spin"></span><span>${esc(state.cfg.model)} is writing the summary…</span></div>`; return; }
+  if (s.loading) { const secs = Math.round((Date.now() - s.started) / 1000); box.innerHTML = `<div class="note"><span class="spin"></span><span>${esc(state.cfg.model)} is writing the summary… ${secs}s <span class="sub">(a local model on a laptop CPU can take a few minutes)</span></span></div>`; return; }
   if (s.error) { box.innerHTML = `<div class="note">${IC.alert}<span>${esc(s.error)}</span></div>`; return; }
   box.innerHTML = `<div class="narr"><div class="lang"><i>IT</i><p lang="it">${esc(s.it)}</p></div><div class="lang"><i>EN</i><p>${esc(s.en)}</p></div>
     <div class="muted" style="font-size:12px">Written by ${esc(s.model)} from the computed numbers.</div></div>`;
@@ -759,7 +759,8 @@ function renderNarr() {
 
 $("sum-btn").onclick = async () => {
   const m = state.month;
-  state.summary[m] = {loading: true}; renderNarr();
+  state.summary[m] = {loading: true, started: Date.now()}; renderNarr();
+  const tick = setInterval(() => { if (state.summary[m] && state.summary[m].loading) renderNarr(); else clearInterval(tick); }, 1000);
   try { state.summary[m] = await api("/api/summary?month=" + m); }
   catch (e) {
     state.summary[m] = {error: e.status === 503
