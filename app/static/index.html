@@ -537,6 +537,8 @@ const IC = {
 
 const KINDS = {
   duplicate: {title:"Possible duplicate", tone:"bad", icon:IC.dup, why:"Same supplier, number and year as another invoice. Paying or deducting it twice is an easy mistake."},
+  amount_conflict: {title:"Same number, different amounts", tone:"bad", icon:IC.dup, why:"Two documents share supplier and invoice number but not the total. One is wrong, or one is a correction: check which one to keep."},
+  possible_duplicate: {title:"Same amount a few days apart", tone:"warn", icon:IC.dup, why:"Same supplier and same total within 10 days under a different number. Make sure you were not billed twice for one purchase."},
   vat_mismatch: {title:"VAT does not match the rate", tone:"bad", icon:IC.vat, why:"Taxable × rate gives a different VAT. Ask the supplier for a corrected invoice before you deduct it."},
   total_mismatch: {title:"Total does not add up", tone:"warn", icon:IC.sum, why:"Often withholding tax (ritenuta d'acconto) or stamp duty (bollo). Check before paying the declared amount."},
   overdue: {title:"Overdue payment", tone:"warn", icon:IC.clock, why:"Unpaid past its due date. If you already paid it, mark it paid in the table."},
@@ -679,7 +681,7 @@ function renderKpis() {
   for (const a of d.anomalies) by[a.kind] = (by[a.kind] || 0) + 1;
   $("k-anom").textContent = n;
   $("k-anom-card").classList.toggle("alert", n > 0);
-  const short = {duplicate:"duplicate", vat_mismatch:"VAT", total_mismatch:"total", overdue:"overdue"};
+  const short = {duplicate:"duplicate", amount_conflict:"amount conflict", possible_duplicate:"possible duplicate", vat_mismatch:"VAT", total_mismatch:"total", overdue:"overdue"};
   $("k-anom-f").textContent = n ? Object.entries(by).map(([k, v]) => `${v} ${short[k] || k}`).join(" · ") : "All checks passed";
 }
 
@@ -727,7 +729,7 @@ function renderAnoms() {
     $("anoms").innerHTML = `<div class="ok-state">${IC.check}<span>No duplicates, VAT errors or overdue payments in ${esc(fmtMonth(state.month))}.</span></div>`;
     return;
   }
-  const order = {duplicate: 0, vat_mismatch: 1, total_mismatch: 2, overdue: 3};
+  const order = {duplicate: 0, amount_conflict: 0, possible_duplicate: 1, vat_mismatch: 1, total_mismatch: 2, overdue: 3};
   $("anoms").innerHTML = list.slice().sort((a, b) => (order[a.kind] ?? 9) - (order[b.kind] ?? 9)).map(a => {
     const k = kind(a.kind);
     return `<div class="anom ${k.tone}"><div class="ai">${k.icon}</div><div>
