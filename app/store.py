@@ -105,3 +105,16 @@ def set_category(invoice_id: int, category: str) -> bool:
 def clear() -> None:
     with connect() as conn:
         conn.execute("DELETE FROM invoices")
+
+
+def wipe() -> int:
+    """Delete every invoice and compact the file, so deleted rows do not linger in free pages."""
+    with connect() as conn:
+        removed = conn.execute("DELETE FROM invoices").rowcount
+        conn.execute("DELETE FROM sqlite_sequence WHERE name = 'invoices'")
+    conn = sqlite3.connect(db_path())
+    try:
+        conn.execute("VACUUM")
+    finally:
+        conn.close()
+    return removed

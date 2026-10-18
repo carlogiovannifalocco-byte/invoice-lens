@@ -286,3 +286,105 @@ def test_summary_facts_are_plain_and_only_list_real_overdue():
     overdue = next(l for l in facts.splitlines() if l.startswith("Overdue:"))
     assert "Coworking Dorsoduro" in overdue and "Accademia Digitale" not in overdue
     assert "VAT that can be reclaimed" in facts and "{" not in facts
+
+
+def test_accountant_pack_has_summary_csv_checks_and_calendar(tmp_path, monkeypatch):
+    import io
+    import zipfile
+
+    client = _client(tmp_path, monkeypatch)
+    client.post("/api/invoices", files=[("files", (f"{n}.xml", sample(n), "text/xml")) for n in ("01", "07", "08", "09")])
+    res = client.get("/api/accountant-pack.zip?month=2026-10")
+    assert res.status_code == 200
+    assert "invoicelens-commercialista-2026-10.zip" in res.headers["content-disposition"]
+    z = zipfile.ZipFile(io.BytesIO(res.content))
+    assert sorted(z.namelist()) == ["da-verificare-2026-10.csv", "fatture-2026-10.csv", "fatture-2026-10.xlsx",
+                                    "riepilogo-2026-10.html", "scadenze.ics"]
+
+    invoices = z.read("fatture-2026-10.csv").decode("utf-8-sig").splitlines()
+    assert len(invoices) == 1 + 3  # header + the three October invoices; Energia Chiara is September
+    assert "Accademia Digitale" in "\n".join(invoices) and "Energia Chiara" not in "\n".join(invoices)
+    assert "199,00;40,00;239,00" in "\n".join(invoices)  # Italian decimal comma, amounts from the XML
+
+    checks = z.read("da-verificare-2026-10.csv").decode("utf-8-sig")
+    assert "IVA al 22% su 199,00 dovrebbe essere 43,78, la fattura riporta 40,00" in checks
+    assert checks.count("Possibile doppione") == 2
+    assert "imponibile × aliquota, arrotondato al centesimo" in checks  # the rule travels with the flag
+
+    summary = z.read("riepilogo-2026-10.html").decode()
+    assert "Fatture passive di ottobre 2026" in summary
+    assert "Solo indicativo" in summary and "forfettario" in summary
+    assert "BEGIN:VCALENDAR" in z.read("scadenze.ics").decode()
+    assert client.get("/api/accountant-pack.zip?month=10-2026").status_code == 400
+
+
+def test_invoices_carry_plain_explanation_and_tax_hint(tmp_path, monkeypatch):
+    client = _client(tmp_path, monkeypatch)
+    client.post("/api/invoices", files=[("files", ("07.xml", sample("07"), "text/xml"))])
+    (r,) = client.get("/api/invoices").json()
+    assert r["explanation"].startswith("Accademia Digitale S.r.l. billed you €199.00 plus €40.00 VAT (22%)")
+    assert "by bank transfer" in r["explanation"]
+    assert "to check before you pay" in r["explanation"]
+    vat = next(a for a in r["anomalies"] if a["kind"] == "vat_mismatch")
+    assert "taxable × rate" in vat["rule"] and "€0.02" in vat["rule"]
+    patched = client.patch(f"/api/invoices/{r['id']}", json={"category": "telecom"}).json()
+    assert patched["tax_hint"].startswith("Phone and internet: 80% deductible")
+    assert "forfettario" in client.get("/api/config").json()["tax_hint_disclaimer"]
+
+
+def test_credit_note_is_explained_as_money_back():
+    from app.accountant import explain
+
+    inv = parse_fatturapa(sample("03"))[0].to_dict()
+    inv["doc_type"] = "TD04"
+    text = explain({"invoice": inv, "paid": True}, [])
+    assert "credit note" in text and "not a new cost" in text and "marked it as paid" in text
+
+
+def test_csv_export_neutralizes_spreadsheet_formulas(tmp_path, monkeypatch):
+    from app.accountant import csv_safe
+
+    assert csv_safe("=HYPERLINK(\"http://x\")") == "'=HYPERLINK(\"http://x\")"
+    assert csv_safe("+39 caffè") == "'+39 caffè" and csv_safe("Nuvola S.r.l.") == "Nuvola S.r.l."
+    client = _client(tmp_path, monkeypatch)
+    evil = sample("01").replace(b"Nuvola Hosting S.r.l.", b"=cmd|' /C calc'!A0")
+    client.post("/api/invoices", files=[("files", ("evil.xml", evil, "text/xml"))])
+    assert ";'=cmd|" in client.get("/api/export.csv").text
+
+
+def test_excel_report_has_summary_invoices_and_checks_with_rules(tmp_path, monkeypatch):
+    import io
+
+    from openpyxl import load_workbook
+
+    client = _client(tmp_path, monkeypatch)
+    evil = sample("08").replace(b"Nuvola Hosting S.r.l.", b"=1+1 Hosting")
+    client.post("/api/invoices", files=[("files", ("01.xml", sample("01"), "text/xml")),
+                                        ("files", ("07.xml", sample("07"), "text/xml")),
+                                        ("files", ("evil.xml", evil, "text/xml"))])
+    res = client.get("/api/report.xlsx?month=2026-10")
+    assert res.status_code == 200 and "invoicelens-2026-10.xlsx" in res.headers["content-disposition"]
+    wb = load_workbook(io.BytesIO(res.content))
+    assert wb.sheetnames == ["Riepilogo", "Fatture", "Da verificare"]
+    summary = [c.value for row in wb["Riepilogo"].iter_rows() for c in row if c.value is not None]
+    assert "Fatture passive di ottobre 2026" in summary and 3 in summary
+    rows = list(wb["Fatture"].iter_rows(values_only=True))
+    accademia = next(r for r in rows if r[3] == "Accademia Digitale S.r.l.")
+    assert accademia[7:10] == (199.0, 40.0, 239.0)  # real numbers, not text
+    assert any(r[3] == "=1+1 Hosting" for r in rows)  # kept as text, not evaluated as a formula
+    assert wb["Fatture"]["D4"].data_type == "s"
+    checks = list(wb["Da verificare"].iter_rows(values_only=True))
+    assert any("43,78" in (r[4] or "") and "0,02" in (r[5] or "") for r in checks)
+
+
+def test_wipe_deletes_everything_only_with_confirmation(tmp_path, monkeypatch):
+    client = _client(tmp_path, monkeypatch)
+    client.post("/api/invoices", files=[("files", ("01.xml", sample("01"), "text/xml"))])
+    assert client.post("/api/wipe", json={"confirm": "yes"}).status_code == 400
+    assert len(client.get("/api/invoices").json()) == 1
+    res = client.post("/api/wipe", json={"confirm": "DELETE"}).json()
+    assert res["deleted"] == 1
+    assert client.get("/api/invoices").json() == []
+    assert b"Nuvola" not in (tmp_path / "t.db").read_bytes()  # vacuumed, not just unlinked rows
+    monkeypatch.setenv("INVOICELENS_DEMO", "1")
+    assert client.post("/api/wipe", json={"confirm": "DELETE"}).status_code == 403

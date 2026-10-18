@@ -5,16 +5,18 @@ from __future__ import annotations
 import csv
 import io
 import os
+import re
 import threading
 from contextlib import asynccontextmanager
 from datetime import date
 from pathlib import Path
 
 from fastapi import FastAPI, HTTPException, UploadFile
-from fastapi.responses import FileResponse, StreamingResponse
+from fastapi.responses import FileResponse, Response, StreamingResponse
 from pydantic import BaseModel
 
 from . import llm, store
+from .accountant import DISCLAIMER_EN, accountant_pack, csv_safe, explain, report_xlsx, tax_hint
 from .analysis import anomalies, month_stats
 from .ingest import ingest, ingest_upload
 from .parser import InvoiceParseError
@@ -73,6 +75,8 @@ def config():
         "uploads_enabled": not _demo(),
         "can_load_samples": _can_load_samples(),
         "categories": llm.CATEGORIES,
+        "tax_hint_disclaimer": DISCLAIMER_EN,
+        "storage": None if _demo() else os.path.abspath(store.db_path()),
     }
 
 
@@ -99,8 +103,16 @@ async def upload(files: list[UploadFile]):
 def list_invoices():
     records = store.all_invoices()
     for r in records:
-        r["anomalies"] = anomalies(r, records)
+        _enrich(r, records)
     return records
+
+
+def _enrich(record: dict, records: list[dict]) -> dict:
+    """Add the computed checks, a plain-language explanation and the indicative tax hint."""
+    record["anomalies"] = anomalies(record, records)
+    record["explanation"] = explain(record, record["anomalies"])
+    record["tax_hint"] = tax_hint(record["category"])
+    return record
 
 
 class InvoicePatch(BaseModel):
@@ -113,8 +125,7 @@ def _with_anomalies(invoice_id: int) -> dict:
     record = next((r for r in records if r["id"] == invoice_id), None)
     if record is None:
         raise HTTPException(404, "invoice not found")
-    record["anomalies"] = anomalies(record, records)
-    return record
+    return _enrich(record, records)
 
 
 @app.patch("/api/invoices/{invoice_id}")
@@ -198,9 +209,9 @@ def export_csv():
             [
                 r["id"],
                 inv["date"],
-                inv["number"],
-                inv["supplier"]["name"],
-                inv["supplier"]["vat_number"],
+                csv_safe(inv["number"]),
+                csv_safe(inv["supplier"]["name"]),
+                csv_safe(inv["supplier"]["vat_number"]),
                 r["category"],
                 f"{inv['taxable']:.2f}".replace(".", ","),
                 f"{inv['tax']:.2f}".replace(".", ","),
@@ -216,8 +227,7 @@ def export_csv():
     )
 
 
-@app.get("/api/deadlines.ics")
-def deadlines_ics():
+def _deadlines_ics() -> str:
     """Unpaid payment due dates as a calendar file, with a reminder two days before each."""
     stamp = date.today().strftime("%Y%m%d")
     lines = ["BEGIN:VCALENDAR", "VERSION:2.0", "PRODID:-//InvoiceLens//EN"]
@@ -230,6 +240,7 @@ def deadlines_ics():
                 continue
             summary = f"Pay {inv['supplier']['name']} {p['amount']:.2f} EUR (invoice {inv['number']})"
             summary = summary.replace("\\", "\\\\").replace(",", "\\,").replace(";", "\\;")
+            summary = summary.replace("\r", " ").replace("\n", " ")
             lines += [
                 "BEGIN:VEVENT",
                 f"UID:invoice-{r['id']}-{i}@invoicelens",
@@ -240,11 +251,58 @@ def deadlines_ics():
                 "END:VEVENT",
             ]
     lines.append("END:VCALENDAR")
+    return "\r\n".join(lines) + "\r\n"
+
+
+@app.get("/api/deadlines.ics")
+def deadlines_ics():
     return StreamingResponse(
-        iter(["\r\n".join(lines) + "\r\n"]),
+        iter([_deadlines_ics()]),
         media_type="text/calendar",
         headers={"Content-Disposition": "attachment; filename=invoicelens-deadlines.ics"},
     )
+
+
+@app.get("/api/accountant-pack.zip")
+def accountant_pack_zip(month: str | None = None):
+    """One ZIP for the accountant: printable summary (HTML), the month's invoices and checks as CSV,
+    and the unpaid due dates as .ics. Built in code; the model is not called."""
+    month = month or _current_month()
+    if not re.fullmatch(r"\d{4}-\d{2}", month):
+        raise HTTPException(400, "month must be YYYY-MM")
+    data = accountant_pack(store.all_invoices(), month, _deadlines_ics())
+    return Response(
+        data,
+        media_type="application/zip",
+        headers={"Content-Disposition": f"attachment; filename=invoicelens-commercialista-{month}.zip"},
+    )
+
+
+@app.get("/api/report.xlsx")
+def report_xlsx_file(month: str | None = None):
+    """The month as an Excel workbook: summary by category, every invoice, and what to check with the rule used."""
+    month = month or _current_month()
+    if not re.fullmatch(r"\d{4}-\d{2}", month):
+        raise HTTPException(400, "month must be YYYY-MM")
+    return Response(
+        report_xlsx(store.all_invoices(), month),
+        media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        headers={"Content-Disposition": f"attachment; filename=invoicelens-{month}.xlsx"},
+    )
+
+
+class WipeBody(BaseModel):
+    confirm: str
+
+
+@app.post("/api/wipe")
+def wipe(body: WipeBody):
+    """Delete every stored invoice for good. The client must send confirm="DELETE"."""
+    if _demo():
+        raise HTTPException(403, "the public demo is read-only")
+    if body.confirm != "DELETE":
+        raise HTTPException(400, 'send {"confirm": "DELETE"} to delete all invoices')
+    return {"deleted": store.wipe(), "storage": os.path.abspath(store.db_path())}
 
 
 @app.post("/api/demo/load-samples")

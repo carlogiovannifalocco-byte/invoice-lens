@@ -8,6 +8,32 @@ from datetime import date, timedelta
 VAT_TOLERANCE = 0.02  # FatturaPA allows rounding differences of a cent per summary line
 
 
+# The exact rule behind each flag, shown next to it so nobody has to trust a black box.
+RULES = {
+    "duplicate": (
+        "Flagged when another invoice has the same supplier VAT number, the same invoice number and the same year.",
+        "Segnalata se un'altra fattura ha stessa partita IVA del fornitore, stesso numero e stesso anno.",
+    ),
+    "vat_mismatch": (
+        "For each VAT line: taxable × rate, rounded to the cent, must equal the VAT on the invoice within €0.02.",
+        "Per ogni riga di riepilogo IVA: imponibile × aliquota, arrotondato al centesimo, deve coincidere con "
+        "l'imposta in fattura entro 0,02 €.",
+    ),
+    "total_mismatch": (
+        "Taxable + VAT must equal the declared document total within €0.02.",
+        "Imponibile + IVA deve coincidere con il totale documento dichiarato entro 0,02 €.",
+    ),
+    "overdue": (
+        "Flagged when a payment due date is before today and you have not marked the invoice paid.",
+        "Segnalata se una scadenza di pagamento è passata e la fattura non è segnata come pagata.",
+    ),
+}
+
+
+def _it(v: float) -> str:
+    return f"{v:.2f}".replace(".", ",")
+
+
 def anomalies(record: dict, others: list[dict], today: date | None = None) -> list[dict]:
     today = today or date.today()
     inv = record["invoice"]
@@ -22,7 +48,13 @@ def anomalies(record: dict, others: list[dict], today: date | None = None) -> li
             and o["date"][:4] == inv["date"][:4]
         ):
             found.append(
-                {"kind": "duplicate", "message": f"Same number {inv['number']} as invoice #{other['id']}"}
+                {
+                    "kind": "duplicate",
+                    "message": f"Same number {inv['number']} as invoice #{other['id']} "
+                    f"(dated {o['date']}, file {other.get('filename', '?')})",
+                    "message_it": f"Stesso numero {inv['number']} della fattura #{other['id']} "
+                    f"(del {o['date']}, file {other.get('filename', '?')})",
+                }
             )
             break
 
@@ -34,6 +66,8 @@ def anomalies(record: dict, others: list[dict], today: date | None = None) -> li
                     "kind": "vat_mismatch",
                     "message": f"VAT at {row['rate']:g}% on {row['taxable']:.2f} should be "
                     f"{expected:.2f}, invoice says {row['tax']:.2f}",
+                    "message_it": f"IVA al {row['rate']:g}% su {_it(row['taxable'])} dovrebbe essere "
+                    f"{_it(expected)}, la fattura riporta {_it(row['tax'])}",
                 }
             )
 
@@ -44,13 +78,25 @@ def anomalies(record: dict, others: list[dict], today: date | None = None) -> li
                 "kind": "total_mismatch",
                 "message": f"Declared total {inv['declared_total']:.2f} differs from taxable + VAT "
                 f"{computed:.2f} (withholding tax or stamp duty?)",
+                "message_it": f"Totale dichiarato {_it(inv['declared_total'])} diverso da imponibile + IVA "
+                f"{_it(computed)} (ritenuta o bollo?)",
             }
         )
 
     if not record.get("paid"):
         for p in inv["payments"]:
             if p["due_date"] and p["due_date"] < today.isoformat():
-                found.append({"kind": "overdue", "message": f"Payment of {p['amount']:.2f} was due {p['due_date']}"})
+                found.append(
+                    {
+                        "kind": "overdue",
+                        "message": f"Payment of {p['amount']:.2f} was due {p['due_date']}, "
+                        f"{(today - date.fromisoformat(p['due_date'])).days} days ago, and is not marked paid",
+                        "message_it": f"Pagamento di {_it(p['amount'])} scaduto il {p['due_date']} "
+                        f"({(today - date.fromisoformat(p['due_date'])).days} giorni fa), non segnato come pagato",
+                    }
+                )
+    for a in found:
+        a["rule"], a["rule_it"] = RULES[a["kind"]]
     return found
 
 

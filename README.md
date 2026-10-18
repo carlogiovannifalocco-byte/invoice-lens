@@ -12,13 +12,17 @@ Every Italian freelancer receives dozens of *fatture elettroniche* a month as Fa
 - **Reads FatturaPA XML and signed `.p7m`** (DER or base64) deterministically: supplier, VAT number, lines, VAT summary, payment terms. Multiple invoices in one file are supported.
 - **Reads PDF invoices** by extracting the text and asking the model to fill a fixed JSON schema (it is told never to invent values).
 - **Categorizes every expense** (software, travel, professional services...) with an open-weight model, with a one-line reason you can see and override.
-- **Flags anomalies** with plain arithmetic, not the model: duplicate invoices, VAT that does not match the rate, totals that do not add up, overdue payments.
+- **Flags anomalies** with plain arithmetic, not the model: duplicate invoices, VAT that does not match the rate, totals that do not add up, overdue payments. Each flag shows the exact numbers and the rule that raised it.
+- **Accountant pack**: one ZIP per month for the *commercialista*, in Italian: a printable summary (open it and print to PDF), an Excel workbook (summary by category, every invoice, what to check and the rule used), the same data as CSV, and the unpaid due dates as `.ics`. Built in code, no model call.
+- **In plain words**: each invoice explained in two or three sentences (who billed what, how much, when and how to pay, what to check), built from the parsed fields.
+- **Indicative deductibility hints** per category (for example telecom 80% with 50% of the VAT, meals 75%), clearly marked as general rules for the ordinary regime that do not apply to the *regime forfettario*. Your accountant decides.
 - **Dashboard**: monthly spend by category, deductible VAT, payments due in the next 30 days, and a "needs attention" panel that explains each flag and why it matters.
 - **Review in place**: search, filter (category, needs attention, unpaid) and sort the invoice table; expand a row to see its lines, VAT summary, payments and the model's one-line reason; change a category inline (saved as `manual`) and mark invoices paid.
 - **Honest model status**: a header badge shows whether the model endpoint answers or the app is running on the keyword fallback, and every category says where it came from (the model's name, `rules` or `manual`).
 - **Monthly summary** written by the model in Italian and English, from the computed numbers only. The key numbers are shown even when the model is offline.
 - **Calendar reminders**: export unpaid due dates as an `.ics` file with a reminder two days before.
-- **CSV export** that opens directly in Italian-locale spreadsheets (`;` separator, decimal comma).
+- **CSV export** that opens directly in Italian-locale spreadsheets (`;` separator, decimal comma). Text that looks like a spreadsheet formula is neutralized in CSV and Excel exports.
+- **Your data stays yours**: invoices live in one local SQLite file, shown in the footer; "Delete all my data" removes every invoice and compacts the file so nothing can be recovered from it.
 
 ## The interface
 
@@ -109,6 +113,9 @@ flowchart LR
 | `GET` | `/api/summary?month=YYYY-MM` | Model-written summary in Italian and English (503 if the model is offline) |
 | `GET` | `/api/config` | Model name, whether its endpoint answers (cached `GET /models`), demo flags |
 | `GET` | `/api/export.csv`, `/api/deadlines.ics` | Exports |
+| `GET` | `/api/accountant-pack.zip?month=YYYY-MM` | Summary (HTML, print to PDF), Excel, CSV, checks and `.ics` in one ZIP |
+| `GET` | `/api/report.xlsx?month=YYYY-MM` | The month as an Excel workbook |
+| `POST` | `/api/wipe` | `{"confirm": "DELETE"}` deletes every invoice and vacuums the database (not in the public demo) |
 | `POST` | `/api/demo/load-samples` | Load the sample invoices: always in the demo, only into an empty store otherwise |
 
 ## Deploy the public demo on Render
@@ -122,7 +129,7 @@ pip install -r requirements-dev.txt
 pytest
 ```
 
-The tests cover the XML parser, signed `.p7m` extraction (they sign a sample with a throwaway certificate), entity-expansion protection, anomaly rules, the model request format, and the HTTP API (uploads and duplicate reporting, ZIP import, category overrides, paid status, deletes, the status check and sample loading).
+The tests cover the XML parser, signed `.p7m` extraction (they sign a sample with a throwaway certificate), entity-expansion protection, anomaly rules, the model request format, and the HTTP API (uploads and duplicate reporting, ZIP import, category overrides, paid status, deletes, the status check and sample loading), the accountant pack and Excel report, formula neutralization, plain-language explanations and the delete-all endpoint.
 
 ## Limits
 
