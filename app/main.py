@@ -5,6 +5,8 @@ from __future__ import annotations
 import csv
 import io
 import os
+import threading
+from contextlib import asynccontextmanager
 from datetime import date
 from pathlib import Path
 
@@ -25,7 +27,16 @@ if os.getenv("SENTRY_DSN"):
 ROOT = Path(__file__).resolve().parent.parent
 MAX_UPLOAD = 50 * 1024 * 1024  # ZIP archives of a month of invoices
 
-app = FastAPI(title="InvoiceLens")
+
+
+@asynccontextmanager
+async def lifespan(_app):
+    if os.getenv("LLM_WARMUP", "1") != "0":
+        threading.Thread(target=llm.warm_up, daemon=True).start()
+    yield
+
+
+app = FastAPI(title="InvoiceLens", lifespan=lifespan)
 
 
 @app.get("/")

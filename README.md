@@ -72,6 +72,8 @@ uvicorn app.main:app --reload
 | `LLM_BASE_URL` | `http://localhost:11434/v1` | Any OpenAI-compatible endpoint (Ollama, llama.cpp server, vLLM, a hosted Gemma) |
 | `LLM_MODEL` | `gemma3:4b` | Model name at that endpoint |
 | `LLM_API_KEY` | `ollama` | Key for hosted endpoints |
+| `LLM_TIMEOUT` | `300` | Seconds to wait for one model reply (a 4B model on a laptop CPU takes 20-40 s per invoice); a timed-out call is retried once |
+| `LLM_WARMUP` | `1` | Load the model in the background at startup, so the first invoice does not wait for it |
 | `INVOICELENS_DB` | `invoicelens.db` | SQLite file |
 | `SENTRY_DSN` | unset | When set, every model call is traced as a Sentry `gen_ai.chat` span (model, task, token usage) |
 | `INVOICELENS_DEMO` | unset | `1` = public demo: loads the sample invoices, disables uploads and deletes |

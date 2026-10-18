@@ -40,7 +40,7 @@ def _config() -> dict:
         "base_url": os.getenv("LLM_BASE_URL", "http://localhost:11434/v1").rstrip("/"),
         "model": os.getenv("LLM_MODEL", "gemma3:4b"),
         "api_key": os.getenv("LLM_API_KEY", "ollama"),
-        "timeout": float(os.getenv("LLM_TIMEOUT", "120")),
+        "timeout": float(os.getenv("LLM_TIMEOUT", "300")),  # CPU-only laptops are slow
     }
 
 
@@ -83,16 +83,22 @@ def chat_json(system: str, user: str, task: str) -> dict:
         "messages": [{"role": "system", "content": system}, {"role": "user", "content": user}],
     }
     with _span(cfg["model"], task) as span:
-        try:
-            resp = httpx.post(
-                f"{cfg['base_url']}/chat/completions",
-                json=payload,
-                headers={"Authorization": f"Bearer {cfg['api_key']}"},
-                timeout=cfg["timeout"],
-            )
-            resp.raise_for_status()
-        except httpx.HTTPError as exc:
-            raise LLMUnavailable(str(exc)) from exc
+        for attempt in (1, 2):
+            try:
+                resp = httpx.post(
+                    f"{cfg['base_url']}/chat/completions",
+                    json=payload,
+                    headers={"Authorization": f"Bearer {cfg['api_key']}"},
+                    timeout=cfg["timeout"],
+                )
+                resp.raise_for_status()
+                break
+            except httpx.TimeoutException as exc:
+                # The first call after a cold start also loads the model into memory; retry once.
+                if attempt == 2:
+                    raise LLMUnavailable(str(exc)) from exc
+            except httpx.HTTPError as exc:
+                raise LLMUnavailable(str(exc)) from exc
         body = resp.json()
         usage = body.get("usage") or {}
         if span is not None:
@@ -125,10 +131,27 @@ def _parse_json(content: str) -> dict:
         return json.loads(match.group(0))
 
 
+CATEGORY_HINTS = {
+    "software": "licences, SaaS, cloud, web hosting, domain names",
+    "hardware": "computers, monitors, keyboards, devices",
+    "travel": "trains, flights, hotels, taxis, fuel, tolls",
+    "meals": "restaurants, business lunches, catering",
+    "office": "coworking desks, stationery, office supplies",
+    "utilities": "electricity, gas, water",
+    "telecom": "phone lines, mobile plans, fibre or home internet",
+    "professional_services": "accountant, lawyer, notary, consultants",
+    "training": "courses, workshops, conferences, books",
+    "marketing": "ads, sponsorships, promotional material",
+    "rent": "office or studio rent",
+    "other": "anything that fits none of the above",
+}
+
 CATEGORIZE_SYSTEM = (
     "You are a bookkeeping assistant for Italian freelancers. Classify a purchase invoice into exactly "
-    f"one category from this list: {', '.join(CATEGORIES)}. Reply with JSON: "
-    '{"category": "<one of the list>", "confidence": <0..1>, "reason": "<max 15 words, English>"}'
+    "one of these categories:\n"
+    + "\n".join(f"- {k}: {v}" for k, v in CATEGORY_HINTS.items())
+    + '\nReply with JSON: {"category": "<one of the list>", "confidence": <0..1>, '
+    '"reason": "<max 15 words, English>"}'
 )
 
 
@@ -156,14 +179,58 @@ def extract_from_text(text: str) -> dict:
 
 
 SUMMARY_SYSTEM = (
-    "You write short, friendly monthly expense summaries for an Italian freelancer. Use only the numbers "
-    "given. Mention the biggest categories, VAT that can be reclaimed, anomalies to check and upcoming "
-    'payments. Reply with JSON: {"it": "<paragraph in Italian>", "en": "<same paragraph in English>"}'
+    "You write a short monthly expense summary for an Italian freelancer from a list of facts computed "
+    "by their bookkeeping app. Use only these facts: do not add numbers, suppliers or problems that are "
+    "not listed, and do not call an invoice late unless it is listed under 'Overdue'. At most four "
+    "sentences per language. The Italian text addresses the reader as 'tu' and uses no English words. "
+    'Reply with JSON: {"it": "<paragraph in Italian>", "en": "<same paragraph in English>"}'
 )
+
+_ANOMALY_LABELS = {
+    "duplicate": "Possible duplicate",
+    "vat_mismatch": "VAT does not match the rate",
+    "total_mismatch": "Total does not add up",
+    "overdue": "Overdue",
+}
+
+
+def summary_facts(stats: dict) -> str:
+    """Turn the computed month into plain sentences, so a small model cannot misread nested JSON."""
+    eur = lambda v: f"{v:.2f} EUR"
+    lines = [
+        f"Month: {stats['month']}. Invoices: {stats['invoice_count']}.",
+        f"Spend before VAT: {eur(stats['taxable_total'])}. VAT that can be reclaimed: {eur(stats['vat_total'])}.",
+    ]
+    top = list(stats["by_category"].items())[:3]
+    if top:
+        lines.append("Biggest categories: " + "; ".join(f"{k.replace('_', ' ')} {eur(v)}" for k, v in top) + ".")
+    for kind, label in _ANOMALY_LABELS.items():
+        items = [a for a in stats["anomalies"] if a["kind"] == kind]
+        if items:
+            lines.append(f"{label}: " + "; ".join(f"{a['supplier']} ({a['message']})" for a in items) + ".")
+    if stats["upcoming_payments"]:
+        lines.append(
+            "Payments due in the next 30 days: "
+            + "; ".join(f"{p['supplier']} {eur(p['amount'])} on {p['due_date']}" for p in stats["upcoming_payments"])
+            + "."
+        )
+    else:
+        lines.append("No payments due in the next 30 days.")
+    return "\n".join(lines)
 
 
 def monthly_summary(stats: dict) -> dict:
-    return chat_json(SUMMARY_SYSTEM, json.dumps(stats, ensure_ascii=False), "monthly_summary")
+    return chat_json(SUMMARY_SYSTEM, summary_facts(stats), "monthly_summary")
+
+
+def warm_up() -> None:
+    """Load the model in the background at startup so the first invoice does not wait for it."""
+    if not endpoint_reachable():
+        return
+    try:
+        chat_json("Reply with JSON.", '{"ping": true}', "warm_up")
+    except (LLMUnavailable, ValueError):
+        pass
 
 
 # Used only when no model endpoint is reachable, so the app still works; results are labelled "rules".

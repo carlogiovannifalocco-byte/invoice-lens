@@ -263,3 +263,26 @@ def test_samples_load_only_into_empty_local_store(tmp_path, monkeypatch):
     monkeypatch.setenv("INVOICELENS_DEMO", "1")
     assert client.post("/api/demo/load-samples").json()["loaded"] == 10
     assert len(client.get("/api/invoices").json()) == 10
+
+
+def test_retries_once_on_timeout(monkeypatch):
+    calls = []
+
+    def flaky_post(url, json, headers, timeout):
+        calls.append(1)
+        if len(calls) == 1:
+            raise llm.httpx.ReadTimeout("model still loading")
+        return _FakeResponse('{"category": "software", "confidence": 0.9, "reason": "hosting"}')
+
+    monkeypatch.setattr(llm.httpx, "post", flaky_post)
+    inv = parse_fatturapa(sample("01"))[0].to_dict()
+    assert llm.categorize(inv)["category"] == "software"
+    assert len(calls) == 2
+
+
+def test_summary_facts_are_plain_and_only_list_real_overdue():
+    records = [_record(i, f"{i:02d}") for i in range(1, 11)]
+    facts = llm.summary_facts(month_stats(records, "2026-10", TODAY))
+    overdue = next(l for l in facts.splitlines() if l.startswith("Overdue:"))
+    assert "Coworking Dorsoduro" in overdue and "Accademia Digitale" not in overdue
+    assert "VAT that can be reclaimed" in facts and "{" not in facts
