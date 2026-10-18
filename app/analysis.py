@@ -45,6 +45,14 @@ def _it(v: float) -> str:
     return f"{v:.2f}".replace(".", ",")
 
 
+def _iso(value) -> date | None:
+    # PDF fields come from the model and can be empty or malformed; skip the check rather than fail
+    try:
+        return date.fromisoformat(str(value))
+    except ValueError:
+        return None
+
+
 def anomalies(record: dict, others: list[dict], today: date | None = None) -> list[dict]:
     today = today or date.today()
     inv = record["invoice"]
@@ -58,9 +66,11 @@ def anomalies(record: dict, others: list[dict], today: date | None = None) -> li
         if o["number"] == inv["number"] and o["date"][:4] == inv["date"][:4]:
             same_number = same_number or other
         elif (
-            abs(o["total"] - inv["total"]) <= VAT_TOLERANCE
+            inv["supplier"]["vat_number"]
+            and abs(o["total"] - inv["total"]) <= VAT_TOLERANCE
             and inv["total"] > 0
-            and abs((date.fromisoformat(o["date"]) - date.fromisoformat(inv["date"])).days) <= POSSIBLE_DUPLICATE_DAYS
+            and _iso(o["date"]) and _iso(inv["date"])
+            and abs((_iso(o["date"]) - _iso(inv["date"])).days) <= POSSIBLE_DUPLICATE_DAYS
         ):
             near_total = near_total or other
 

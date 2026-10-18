@@ -406,3 +406,10 @@ def test_amount_conflict_and_possible_duplicate():
 
     next_month = _with(near, date="2026-11-01")
     assert "possible_duplicate" not in {a["kind"] for a in anomalies(next_month, [base, next_month], TODAY)}
+
+    # PDF fields from the model may be empty: no crash, and no match on a missing VAT number
+    no_date = _with(near, date="")
+    assert "possible_duplicate" not in {a["kind"] for a in anomalies(no_date, [base, no_date], TODAY)}
+    anon = _with(near, supplier=dict(near["invoice"]["supplier"], vat_number=""))
+    anon_base = _with(base, supplier=dict(base["invoice"]["supplier"], vat_number=""))
+    assert "possible_duplicate" not in {a["kind"] for a in anomalies(anon, [anon_base, anon], TODAY)}
